@@ -22,8 +22,9 @@ const crypto = require('node:crypto');
 
 const store = require('./store');
 const { sanitize } = require('./settings');
-const { tgApi, validateInitData, esc, BOT_TOKEN } = require('./telegram');
+const { tgApi, validateInitData, esc, BOT_TOKEN, API_BASE } = require('./telegram');
 const bot = require('./bot');
+const payments = require('./payments');
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '127.0.0.1';
@@ -91,10 +92,20 @@ setInterval(() => { const now = Date.now(); for (const [k, v] of hits) if (now -
 
 function getSettings() { return sanitize(store.read('settings', {})); }
 
-// на витрину не отдаём то, что клиенту знать незачем
+// На витрину не отдаём то, что клиенту знать незачем. Особенно creds платёжного
+// мерчанта: /api/settings открыт всем без авторизации, и утечь секрет там нельзя.
 function publicSettings(s) {
-  const { notify, ...rest } = s;
-  return { ...rest, notifyEnabled: notify.enabled };
+  const { notify, payments, ...rest } = s;
+  return {
+    ...rest,
+    notifyEnabled: notify.enabled,
+    payments: {
+      enabled: payments.enabled,
+      required: payments.required,
+      buttonText: payments.buttonText,
+      successText: payments.successText,
+    },
+  };
 }
 
 const money = (n, s) => {
@@ -294,6 +305,72 @@ async function handleApi(req, res, url) {
     return json(res, 200, { ok: true, orderId: order.id, orderText: built.text.replace(/<[^>]+>/g, '') });
   }
 
+  // Создание платежа по уже оформленному заказу. Сумму берём из сохранённого
+  // заказа, а не из запроса — иначе её можно было бы занизить до рубля.
+  if (p === '/api/pay' && method === 'POST') {
+    if (!rateLimit(ip, 10, 60000)) return json(res, 429, { error: 'слишком много запросов' });
+    let body; try { body = await readBody(req); } catch (e) { return json(res, 400, { error: 'bad json' }); }
+
+    const s = getSettings();
+    if (!s.payments.enabled) return json(res, 400, { error: 'онлайн-оплата выключена' });
+
+    const orders = store.read('orders', []);
+    const order = orders.find(o => o.id === Number(body.orderId));
+    if (!order) return json(res, 404, { error: 'заказ не найден' });
+    if (order.paid) return json(res, 400, { error: 'заказ уже оплачен' });
+
+    const provider = payments.getProvider(s.payments.provider);
+    if (!provider) return json(res, 400, { error: 'платёжный провайдер не настроен' });
+
+    let result;
+    try {
+      result = await provider.createPayment(s.payments.creds, order, {
+        currencyCode: s.payments.currencyCode,
+        publicUrl: (process.env.PUBLIC_URL || '').replace(/\/$/, ''),
+      });
+    } catch (e) {
+      console.error('[pay] createPayment failed:', e.message);
+      return json(res, 502, { error: 'платёжный сервис недоступен, попробуйте позже' });
+    }
+    if (!result.ok) return json(res, 502, { error: result.error || 'не удалось создать платёж' });
+
+    order.payment = { provider: s.payments.provider, externalId: result.externalId, at: new Date().toISOString() };
+    store.write('orders', orders);
+    return json(res, 200, { ok: true, url: result.url, manual: !!result.manual });
+  }
+
+  // Колбэк от платёжного мерчанта. Подпись/секрет проверяет сам провайдер.
+  if (p.startsWith('/api/pay/callback/') && method === 'POST') {
+    const name = p.slice('/api/pay/callback/'.length);
+    const s = getSettings();
+    const provider = payments.getProvider(name);
+    if (!provider) { res.writeHead(404); return res.end(); }
+
+    let body; try { body = await readBody(req); } catch (e) { res.writeHead(200); return res.end('ok'); }
+    const check = provider.verifyCallback(s.payments.creds, req.headers, body);
+    if (!check.ok) { res.writeHead(401); return res.end(); }
+
+    // Отвечаем 200 сразу: мерчанты (в т.ч. Platega) ретраят колбэк, если не
+    // получили ответ за минуту, и мы бы получили дубли уведомлений.
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end('ok');
+
+    const orders = store.read('orders', []);
+    const order = orders.find(o => o.id === Number(check.orderId));
+    if (!order || order.paid) return;
+    order.paymentStatus = check.status;
+    if (check.paid) {
+      order.paid = true;
+      order.paidAt = new Date().toISOString();
+      await bot.notifyManagers(s, `💳 <b>Заказ №${order.id} оплачен</b>\n\nСумма: ${money(order.total, s)}`).catch(() => {});
+      if (order.user) {
+        await tgApi('sendMessage', { chat_id: order.user.id, text: s.payments.successText }).catch(() => {});
+      }
+    }
+    store.write('orders', orders);
+    return;
+  }
+
   // «написал менеджеру» — фиксируем как лид, чтобы продавец видел интерес
   if (p === '/api/inquiry' && method === 'POST') {
     if (!rateLimit(ip, 20, 60000)) return json(res, 429, { error: 'too many requests' });
@@ -401,6 +478,63 @@ async function handleApi(req, res, url) {
         users: Object.keys(store.read('users', {})).length,
         botConnected: !!BOT_TOKEN,
       });
+    }
+
+    // Самодиагностика: показывает продавцу, что именно сломано, вместо того
+    // чтобы он читал journalctl. Каждая проверка возвращает причину отказа.
+    if (p === '/api/admin/diagnostics' && method === 'GET') {
+      const s = getSettings();
+      const checks = [];
+      const add = (id, title, ok, detail, fix) => checks.push({ id, title, ok, detail, fix });
+
+      add('token', 'Токен бота задан', !!BOT_TOKEN,
+        BOT_TOKEN ? 'BOT_TOKEN прочитан из .env' : 'BOT_TOKEN пуст',
+        'Впишите токен от @BotFather в /opt/tg-shop/.env и перезапустите: systemctl restart tg-shop');
+
+      if (BOT_TOKEN) {
+        const me = await tgApi('getMe', {}, { retries: 0, timeoutMs: 12000 });
+        if (me.ok) {
+          add('api', `Связь с Telegram (@${me.result.username})`, true, `API: ${API_BASE}`, '');
+        } else if (me.network) {
+          add('api', 'Связь с Telegram', false, me.description,
+            'Сервер не может достучаться до api.telegram.org. Обычно это блокировка у хостера. ' +
+            'Проверьте на сервере: curl -sS -m 10 https://api.telegram.org | head. ' +
+            'Если не отвечает — поднимите прокси и укажите TELEGRAM_API_BASE в .env, либо смените хостинг.');
+        } else {
+          add('api', 'Связь с Telegram', false, me.description || 'Telegram отклонил запрос',
+            'Скорее всего неверный BOT_TOKEN — перевыпустите его через /revoke у @BotFather');
+        }
+      }
+
+      add('publicUrl', 'PUBLIC_URL настроен', /^https:\/\//i.test(process.env.PUBLIC_URL || ''),
+        process.env.PUBLIC_URL || 'не задан',
+        'Без https-адреса Telegram не откроет мини-апп и не отдаст фото при публикации в канал');
+
+      add('notify', 'Указан получатель уведомлений', s.notify.chatIds.length > 0,
+        s.notify.chatIds.length ? `получателей: ${s.notify.chatIds.length}` : 'список пуст',
+        'Вкладка «Уведомления» → добавьте свой chat_id (узнать: отправьте боту /id)');
+
+      add('products', 'В каталоге есть товары', store.read('products', []).length > 0,
+        `товаров: ${store.read('products', []).length}`, 'Вкладка «Товары» → добавьте первый товар');
+
+      if (s.commerce.mode === 'manager') {
+        add('manager', 'Задан контакт менеджера', !!s.manager.buyUrl,
+          s.manager.buyUrl || 'пусто',
+          'Режим «только через менеджера» без ссылки — кнопка покупки не сработает');
+      }
+      if (s.payments.enabled) {
+        const prov = payments.getProvider(s.payments.provider);
+        const missing = prov ? prov.fields.filter(f => !s.payments.creds[f.key]).map(f => f.label) : [];
+        add('payments', 'Онлайн-оплата настроена', !!prov && missing.length === 0,
+          missing.length ? `не заполнено: ${missing.join(', ')}` : `провайдер: ${prov ? prov.label : '—'}`,
+          'Вкладка «Оплата» → заполните ключи мерчанта');
+      }
+
+      return json(res, 200, { checks, apiBase: API_BASE, botMode: process.env.BOT_MODE || 'polling' });
+    }
+
+    if (p === '/api/admin/payment-providers' && method === 'GET') {
+      return json(res, 200, payments.providerSchema());
     }
 
     if (p === '/api/admin/test-notification' && method === 'POST') {

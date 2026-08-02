@@ -887,6 +887,7 @@ function cartIds(){ return [...cart.keys()].filter(id => products.some(p => p.id
 function cartTotal(){ return cartIds().reduce((sum,id)=> sum + products.find(x=>x.id===id).price * cart.get(id), 0); }
 
 function renderCart(){
+  if(!settings) return; // в превью настройки приходят асинхронно из админки
   const ids = cartIds();
   const list = document.getElementById('cartList');
   const footer = document.getElementById('cartFooter');
@@ -1155,7 +1156,7 @@ async function submitOrder(){
     const data = await res.json();
     if(!res.ok || !data.ok) throw new Error(data.error || 'Не удалось отправить заказ');
     haptic.ok();
-    showCheckoutSuccess(data.orderText);
+    showCheckoutSuccess(data.orderText, data.orderId);
     cart.clear();
     updateCartUI();
     loadProducts(); // остатки на сервере уменьшились — подтягиваем актуальные
@@ -1167,21 +1168,51 @@ async function submitOrder(){
   }
 }
 
-function showCheckoutSuccess(orderText){
+function showCheckoutSuccess(orderText, orderId){
   const c = settings.checkout;
+  const pay = settings.payments || {};
   document.getElementById('checkoutBody').innerHTML = `
     <div class="sheet-title">${esc(c.successTitle)}</div>
     <div style="font-size:calc(14px * var(--fs));color:var(--muted);line-height:1.6;margin-bottom:20px;white-space:pre-line">${esc(c.successText)}</div>
-    <button class="checkout-btn" id="coCopyBtn" style="margin-bottom:10px">Скопировать заказ</button>
+    ${pay.enabled && orderId ? `<button class="checkout-btn" id="coPayBtn" style="margin-bottom:10px">${esc(pay.buttonText || 'Оплатить онлайн')}</button>` : ''}
+    <button class="${pay.enabled && orderId ? 'secondary-btn' : 'checkout-btn'}" id="coCopyBtn" style="margin-bottom:10px">Скопировать заказ</button>
     ${settings.manager.buyUrl ? `<button class="secondary-btn" id="coWriteBtn">Написать менеджеру</button>` : ''}
     <button class="secondary-btn" id="coDoneBtn">Готово</button>
   `;
+  const payBtn = document.getElementById('coPayBtn');
+  if(payBtn) payBtn.onclick = () => startPayment(orderId, payBtn);
   document.getElementById('coCopyBtn').onclick = () => {
     navigator.clipboard?.writeText(orderText).then(()=> { haptic.ok(); showToast('Скопировано'); }).catch(()=>{});
   };
   const w = document.getElementById('coWriteBtn');
   if(w) w.onclick = () => openBuyLink(settings.manager.buyUrl, orderText);
   document.getElementById('coDoneBtn').onclick = () => closeSheet('checkoutOverlay');
+}
+
+// Онлайн-оплата: сервер сам считает сумму по сохранённому заказу и возвращает
+// ссылку мерчанта. Открываем её через openLink, чтобы платёжная страница
+// не рисовалась внутри мини-аппа — там часто ломается 3-D Secure.
+async function startPayment(orderId, btn){
+  btn.disabled = true;
+  const original = btn.textContent;
+  btn.textContent = 'Готовим оплату…';
+  try{
+    const res = await fetch('/api/pay', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ orderId }),
+    });
+    const data = await res.json();
+    if(!res.ok || !data.ok) throw new Error(data.error || 'Не удалось создать платёж');
+    haptic.ok();
+    if(tg?.openLink) tg.openLink(data.url); else window.open(data.url, '_blank');
+    btn.textContent = 'Открыть оплату ещё раз';
+    btn.disabled = false;
+  }catch(e){
+    haptic.err();
+    showToast(e.message, true);
+    btn.textContent = original;
+    btn.disabled = false;
+  }
 }
 
 function updateFavUI(){
@@ -1375,10 +1406,40 @@ async function loadProducts(){
   }
 }
 
+// Режим превью в админке: та же самая витрина, но настройки прилетают
+// сообщением, а не с сервера. Принимаем только со своего origin — иначе любая
+// страница, встроившая нас в iframe, могла бы подменить магазин.
+const IS_PREVIEW = new URLSearchParams(location.search).has('preview');
+if(IS_PREVIEW){
+  window.addEventListener('message', e => {
+    if(e.origin !== location.origin) return;
+    if(!e.data || e.data.type !== 'shop-preview-settings') return;
+    try{
+      applySettings(e.data.settings);
+      renderCategories();
+      renderGrid();
+      // подтверждаем, ЧТО именно применили: админка сверяет это с текущим
+      // состоянием и повторит отправку, если превью отстало
+      parent.postMessage({ type: 'shop-preview-applied', applied: JSON.stringify(e.data.settings) }, location.origin);
+    }catch(err){
+      console.error('[preview] не удалось применить настройки:', err);
+    }
+  });
+  // сообщаем админке, что готовы принимать настройки: иначе сообщение,
+  // отправленное до нашей загрузки, просто потерялось бы
+  try{ parent.postMessage({ type: 'shop-preview-ready' }, location.origin); }catch(e){}
+  // страховка: если страницу открыли с ?preview=1 напрямую, без админки —
+  // через секунду берём настройки с сервера, чтобы не остаться пустыми
+  setTimeout(() => { if(!settings) loadSettings().then(renderGrid); }, 1000);
+}
+
 // порядок важен: сперва тема (иначе увидим вспышку дефолтной), потом товары
 renderSkeletons();
 (async () => {
-  await loadSettings();
+  // В превью настройки приходят из админки сообщением. Тянуть их ещё и с сервера
+  // нельзя: ответ может прийти ПОСЛЕ пуша и затереть несохранённые правки —
+  // продавец увидел бы, что его изменения «откатываются» сами.
+  if(!IS_PREVIEW) await loadSettings();
   await loadProducts();
 })();
 

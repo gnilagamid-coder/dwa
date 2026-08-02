@@ -93,6 +93,17 @@ const DEFAULTS = {
     successText: 'Спасибо! Заказ отправлен менеджеру — ждите обратной связи.',
   },
 
+  // --- онлайн-оплата ---
+  payments: {
+    enabled: false,
+    provider: 'platega',   // см. server/payments.js
+    currencyCode: 'RUB',   // валюта для мерчанта (ISO), отдельно от символа на витрине
+    required: false,       // true = заказ нельзя оформить без оплаты
+    buttonText: 'Оплатить онлайн',
+    successText: 'Оплата получена ✅ Спасибо!',
+    creds: {},             // { merchantId, secret, paymentMethod, url, ... }
+  },
+
   // --- уведомления менеджеру ---
   notify: {
     enabled: true,
@@ -168,6 +179,7 @@ function sanitize(input) {
   const s = mergeDeep(DEFAULTS, input || {});
   const b = s.brand, t = s.theme, c = s.catalog, m = s.commerce;
   const mg = s.manager, ch = s.checkout, n = s.notify, cn = s.channel, bt = s.bot, pr = s.profile, ad = s.advanced;
+  const pay = s.payments || {};
 
   return {
     version: 2,
@@ -246,6 +258,18 @@ function sanitize(input) {
       agreementText: str(ch.agreementText, DEFAULTS.checkout.agreementText, 200),
       successTitle: str(ch.successTitle, DEFAULTS.checkout.successTitle, 60),
       successText: str(ch.successText, DEFAULTS.checkout.successText, 400),
+    },
+    payments: {
+      enabled: bool(pay.enabled),
+      provider: str(pay.provider, 'platega', 24),
+      currencyCode: str(pay.currencyCode, 'RUB', 8).toUpperCase(),
+      required: bool(pay.required),
+      buttonText: str(pay.buttonText, 'Оплатить онлайн', 40),
+      successText: str(pay.successText, DEFAULTS.payments.successText, 200),
+      // ключи мерчанта — произвольный набор полей, зависит от провайдера
+      creds: Object.fromEntries(
+        Object.entries(pay.creds || {}).slice(0, 20).map(([k, v]) => [String(k).slice(0, 40), String(v == null ? '' : v).slice(0, 300)])
+      ),
     },
     notify: {
       enabled: bool(n.enabled, true),

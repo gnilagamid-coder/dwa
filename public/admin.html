@@ -127,6 +127,37 @@
   .order pre{white-space:pre-wrap;font-family:inherit;font-size:12.5px;line-height:1.5}
 
   .empty{color:var(--muted);text-align:center;padding:26px 0;font-size:13px}
+
+  /* превью витрины «в телефоне» */
+  .preview-card h2{align-items:center}
+  .phone{
+    width:100%;max-width:300px;margin:0 auto;aspect-ratio:9/17;
+    border:8px solid #000;border-radius:26px;overflow:hidden;background:#000;
+    box-shadow:0 6px 26px rgba(0,0,0,.5);
+  }
+  .phone iframe{width:100%;height:100%;border:0;display:block}
+
+  /* диагностика */
+  .check{display:flex;gap:10px;align-items:flex-start;padding:11px 0;border-bottom:1px solid var(--surface-2)}
+  .check:last-child{border-bottom:none}
+  .check .mark{flex:0 0 20px;font-size:15px;line-height:1.3}
+  .check.ok .mark{color:#3ec98a}
+  .check.bad .mark{color:var(--danger)}
+  .check .body{flex:1;min-width:0}
+  .check .t{font-size:13.5px;font-weight:600}
+  .check .d{font-size:11.5px;color:var(--muted);margin-top:3px;line-height:1.45;word-break:break-word}
+  .check .fix{font-size:11.5px;color:var(--accent-2);margin-top:5px;line-height:1.45}
+
+  /* чек-лист запуска */
+  .steps{counter-reset:s}
+  .step{display:flex;gap:10px;align-items:flex-start;padding:9px 0;cursor:pointer}
+  .step .num{flex:0 0 22px;height:22px;background:var(--surface-2);color:var(--muted);
+    display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700}
+  .step.done .num{background:#3ec98a;color:#000}
+  .step .txt{font-size:13px;line-height:1.4}
+  .step.done .txt{color:var(--muted);text-decoration:line-through}
+  .progress{height:5px;background:var(--surface-2);margin:10px 0 14px}
+  .progress i{display:block;height:100%;background:var(--accent);transition:width .3s}
   .savebar{position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:2px solid var(--accent);padding:11px 14px;display:none;z-index:30}
   .savebar.show{display:block}
   .savebar .inner{max-width:620px;margin:0 auto;display:flex;gap:10px;align-items:center}
@@ -150,12 +181,21 @@
     <div class="tabs" id="tabs"></div>
   </div>
 
+  <!-- Превью живёт ВНЕ panel-theme: панель перерисовывается на каждое изменение,
+       а пересоздание <iframe> заставляло бы витрину перезагружаться и мигать. -->
+  <div class="card preview-card" id="previewHost" style="display:none">
+    <h2>Как это выглядит <button type="button" class="ghost" id="previewReload" style="padding:5px 10px;font-size:11px">Обновить</button></h2>
+    <div class="hint">Настоящая витрина с вашими товарами. Меняйте параметры ниже — превью перерисуется само.</div>
+    <div class="phone"><iframe id="previewFrame" src="/index.html?preview=1" title="Превью витрины"></iframe></div>
+  </div>
+
   <div class="panel" id="panel-dashboard"></div>
   <div class="panel" id="panel-brand"></div>
   <div class="panel" id="panel-theme"></div>
   <div class="panel" id="panel-catalog"></div>
   <div class="panel" id="panel-commerce"></div>
   <div class="panel" id="panel-checkout"></div>
+  <div class="panel" id="panel-payments"></div>
   <div class="panel" id="panel-notify"></div>
   <div class="panel" id="panel-bot"></div>
   <div class="panel" id="panel-channel"></div>
@@ -326,8 +366,10 @@ function bindPanel(root){
 
 // смена темы должна сразу отражаться на самой админке — это и есть живое превью
 function afterChange(path){
-  if(path.startsWith('theme.')) applyTheme(settings.theme);
+  if(path.startsWith('theme.')){ applyTheme(settings.theme); refreshPreview(); }
   if(path === 'brand.shopName') $('shopTitle').textContent = settings.brand.shopName || 'Магазин';
+  // у каждого мерчанта свой набор ключей — перерисовываем форму под выбранного
+  if(path === 'payments.provider') buildPayments();
 }
 
 function renderTags(box, path){
@@ -390,7 +432,7 @@ function renderLines(box, path){
 /* ==================== ВКЛАДКИ ==================== */
 const TABS = [
   ['dashboard','Обзор'], ['brand','Бренд'], ['theme','Тема'], ['catalog','Каталог'],
-  ['commerce','Продажи'], ['checkout','Форма заказа'], ['notify','Уведомления'],
+  ['commerce','Продажи'], ['checkout','Форма заказа'], ['payments','Оплата'], ['notify','Уведомления'],
   ['bot','Бот'], ['channel','Канал'], ['products','Товары'], ['orders','Заказы'], ['advanced','Ещё'],
 ];
 let activeTab = 'dashboard';
@@ -405,6 +447,7 @@ function selectTab(id){
   renderTabs();
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   $('panel-' + id).classList.add('active');
+  $('previewHost').style.display = id === 'theme' ? '' : 'none';
   window.scrollTo(0,0);
   buildPanel(id);
 }
@@ -425,6 +468,7 @@ function buildPanel(id){
   if(id === 'catalog')   return renderPanel('panel-catalog', PANEL_CATALOG());
   if(id === 'commerce')  return renderPanel('panel-commerce', PANEL_COMMERCE());
   if(id === 'checkout')  return renderPanel('panel-checkout', PANEL_CHECKOUT());
+  if(id === 'payments')  return buildPayments();
   if(id === 'notify')    return buildNotify();
   if(id === 'bot')       return renderPanel('panel-bot', PANEL_BOT());
   if(id === 'channel')   return renderPanel('panel-channel', PANEL_CHANNEL());
@@ -517,7 +561,47 @@ function buildTheme(){
     applyTheme(settings.theme);
     buildTheme();
   });
+  refreshPreview();
 }
+
+// Превью — это настоящая витрина в iframe. Вместо перезагрузки при каждом
+// движении ползунка отдаём ей тему сообщением: она применяет её мгновенно
+// и без мигания. Так превью физически не может разойтись с реальностью.
+let previewSent = '';   // что мы отправили последним
+let previewAcked = '';  // что превью реально применило и подтвердило
+
+function pushPreview(force){
+  const frame = document.getElementById('previewFrame');
+  if(!frame || !frame.contentWindow || !settings) return;
+  const snapshot = JSON.stringify(settings);
+  if(!force && snapshot === previewSent && snapshot === previewAcked) return;
+  previewSent = snapshot;
+  try{
+    // отправляем разобранную копию: так в превью гарантированно уезжает
+    // состояние на момент вызова, а не общая ссылка на изменяемый объект
+    frame.contentWindow.postMessage(
+      { type: 'shop-preview-settings', settings: JSON.parse(snapshot) }, location.origin);
+  }catch(e){ previewSent = ''; /* iframe ещё грузится — досыл сделает сторож ниже */ }
+}
+const refreshPreview = debounce(() => pushPreview(false), 120);
+
+// Сторож: раз в 400 мс сверяет, что превью подтвердило именно текущее состояние.
+// Событийной отправки мало — сообщение может уйти, пока iframe перезагружается,
+// или прийти раньше, чем витрина повесит обработчик. Здесь схема самолечится:
+// пока подтверждение не совпадает с настройками, отправка повторяется.
+setInterval(() => {
+  if(activeTab !== 'theme' || !settings) return;
+  if(previewAcked !== JSON.stringify(settings)) pushPreview(true);
+}, 400);
+
+window.addEventListener('message', e => {
+  if(e.origin !== location.origin) return;
+  if(!e.data) return;
+  // витрина загрузилась и готова принимать настройки
+  if(e.data.type === 'shop-preview-ready'){ previewAcked = ''; pushPreview(true); }
+  // витрина подтвердила, что применила присланное состояние
+  if(e.data.type === 'shop-preview-applied') previewAcked = e.data.applied || '';
+});
 
 // ---------- Каталог ----------
 const PANEL_CATALOG = () => ([
@@ -592,6 +676,69 @@ const PANEL_CHECKOUT = () => ([
     F.area('checkout.successText','Текст после заказа'),
   ]},
 ]);
+
+// ---------- Оплата ----------
+let paymentProviders = [];
+
+async function buildPayments(){
+  if(!paymentProviders.length){
+    try{ paymentProviders = await api('/api/admin/payment-providers'); }catch(e){ paymentProviders = []; }
+  }
+  const active = paymentProviders.find(p => p.key === settings.payments.provider) || paymentProviders[0];
+  const creds = settings.payments.creds || {};
+
+  $('panel-payments').innerHTML = `
+    ${renderCard({ title:'Приём онлайн-оплаты',
+      hint:'Выключено — покупатель просто оставляет заказ, а деньги вы берёте как договорились. '+
+           'Включено — после оформления появляется кнопка оплаты, а когда мерчант подтвердит платёж, '+
+           'заказ автоматически пометится оплаченным и вам придёт уведомление.',
+      fields:[
+        F.sw('payments.enabled','Включить онлайн-оплату'),
+        F.sel('payments.provider','Платёжный сервис', paymentProviders.map(p=>[p.key,p.label])),
+        F.text('payments.buttonText','Текст кнопки оплаты'),
+        F.text('payments.currencyCode','Валюта для мерчанта', { ph:'RUB', sub:'Трёхбуквенный код: RUB, USD, EUR' }),
+        F.sw('payments.required','Оплата обязательна', { sub:'Заказ считается принятым только после оплаты' }),
+        F.area('payments.successText','Сообщение покупателю после оплаты'),
+      ]})}
+
+    <div class="card">
+      <h2>Ключи ${esc(active ? active.label : 'мерчанта')}</h2>
+      <div class="hint" id="credsHint"></div>
+      <div id="credsFields"></div>
+      <div class="hint" style="margin-top:12px">
+        <b>Куда мерчанту слать подтверждение оплаты (callback URL):</b><br>
+        <code id="callbackUrl" style="word-break:break-all"></code><br>
+        Скопируйте этот адрес в личный кабинет мерчанта — без него заказы не будут
+        помечаться оплаченными автоматически.
+      </div>
+    </div>`;
+
+  bindPanel($('panel-payments'));
+
+  const hint = $('credsHint');
+  const box = $('credsFields');
+  if(!active){
+    box.innerHTML = '<div class="empty">Провайдеры не загрузились</div>';
+  } else {
+    hint.innerHTML = active.key === 'platega'
+      ? 'Получить ключи: зарегистрируйтесь на platega.io, менеджер выдаст Merchant ID и Secret. Регистрация возможна без ИП и ООО.'
+      : 'Заполните поля, которые требует выбранный способ.';
+    box.innerHTML = active.fields.map(f => `
+      <div class="field">
+        <label>${esc(f.label)}</label>
+        <input type="${f.secret ? 'password' : (f.type === 'number' ? 'number' : 'text')}"
+               data-cred="${esc(f.key)}" value="${esc(creds[f.key] || '')}" autocomplete="off">
+        ${f.hint ? `<div class="sub">${esc(f.hint)}</div>` : ''}
+      </div>`).join('');
+    box.querySelectorAll('[data-cred]').forEach(inp => {
+      inp.oninput = () => {
+        settings.payments.creds = { ...(settings.payments.creds || {}), [inp.dataset.cred]: inp.value };
+        markDirty();
+      };
+    });
+  }
+  $('callbackUrl').textContent = `${location.origin}/api/pay/callback/${active ? active.key : 'platega'}`;
+}
 
 // ---------- Уведомления ----------
 function buildNotify(){
@@ -702,7 +849,23 @@ function buildAdvanced(){
 }
 
 // ---------- Обзор ----------
+// Чек-лист запуска: каждый пункт проверяется по реальному состоянию настроек,
+// а не отмечается вручную. Продавец сразу видит, что ещё не доделано.
+function launchSteps(){
+  return [
+    { tab:'brand',    done: settings.brand.shopName !== 'MY SHOP', txt:'Указать название магазина' },
+    { tab:'theme',    done: !!settings.theme.preset, txt:'Выбрать оформление' },
+    { tab:'commerce', done: settings.commerce.mode !== 'manager' || !!settings.manager.buyUrl, txt:'Настроить режим продаж и контакт менеджера' },
+    { tab:'notify',   done: settings.notify.chatIds.length > 0, txt:'Указать, куда присылать заказы' },
+    { tab:'products', done: products.length > 0, txt:'Добавить первый товар' },
+    { tab:'channel',  done: !!settings.channel.miniAppLink, txt:'Вставить ссылку мини-аппа (для публикации в канал)' },
+  ];
+}
+
 function buildDashboard(){
+  const steps = launchSteps();
+  const doneCount = steps.filter(s => s.done).length;
+
   $('panel-dashboard').innerHTML = `
     <div class="stats">
       <div class="stat"><b>${stats.products ?? '—'}</b><span>Товаров</span></div>
@@ -711,19 +874,56 @@ function buildDashboard(){
       <div class="stat"><b>${stats.views ?? '—'}</b><span>Просмотров</span></div>
       <div class="stat"><b>${stats.users ?? '—'}</b><span>В боте</span></div>
     </div>
+
     <div class="card">
-      <h2>Быстрый старт</h2>
-      <div class="hint">
-        1. <b>Бренд</b> — название, лого, описание.<br>
-        2. <b>Тема</b> — пресет оформления, потом цвета под себя.<br>
-        3. <b>Продажи</b> — режим (корзина / только менеджер / заявка / витрина) и контакт менеджера.<br>
-        4. <b>Уведомления</b> — куда присылать заказы, и обязательно нажать «Тестовое уведомление».<br>
-        5. <b>Товары</b> — добавить каталог.
+      <h2>Запуск магазина — ${doneCount} из ${steps.length}</h2>
+      <div class="progress"><i style="width:${Math.round(doneCount / steps.length * 100)}%"></i></div>
+      <div class="steps">
+        ${steps.map((s,i)=>`
+          <div class="step ${s.done?'done':''}" data-goto="${s.tab}">
+            <div class="num">${s.done ? '✓' : i+1}</div>
+            <div class="txt">${s.txt}</div>
+          </div>`).join('')}
       </div>
-      ${!stats.botConnected ? `<div class="hint" style="color:var(--danger)">⚠️ BOT_TOKEN не задан в .env — бот, аватарки и уведомления работать не будут.</div>` : ''}
-      ${!settings.notify.chatIds.length ? `<div class="hint" style="color:var(--accent-2)">⚠️ Не указан ни один получатель уведомлений — заказы будут копиться только в разделе «Заказы».</div>` : ''}
-      ${!settings.manager.buyUrl && settings.commerce.mode==='manager' ? `<div class="hint" style="color:var(--danger)">⚠️ Режим «только через менеджера» включён, но ссылка на менеджера пустая — кнопка покупки не сработает.</div>` : ''}
+    </div>
+
+    <div class="card">
+      <h2>Диагностика <button type="button" class="ghost" id="diagBtn" style="padding:5px 10px;font-size:11px">Проверить</button></h2>
+      <div class="hint">Проверяет связь с Telegram и настройки. Если что-то не работает — начните отсюда.</div>
+      <div id="diagResult"><div class="empty">Нажмите «Проверить»</div></div>
+    </div>
+
+    <div class="card">
+      <h2>Ссылки</h2>
+      <div class="hint">
+        Витрина: <a href="/" target="_blank">${esc(location.origin)}/</a><br>
+        ${settings.channel.miniAppLink ? `Мини-апп: <a href="${esc(settings.channel.miniAppLink)}" target="_blank">${esc(settings.channel.miniAppLink)}</a>` : 'Ссылка мини-аппа не указана — вкладка «Канал»'}
+      </div>
     </div>`;
+
+  $('panel-dashboard').querySelectorAll('[data-goto]').forEach(el =>
+    el.onclick = () => selectTab(el.dataset.goto));
+  $('diagBtn').onclick = runDiagnostics;
+  runDiagnostics();
+}
+
+async function runDiagnostics(){
+  const box = $('diagResult');
+  box.innerHTML = '<div class="empty">Проверяю…</div>';
+  let data;
+  try{ data = await api('/api/admin/diagnostics'); }
+  catch(e){ box.innerHTML = `<div class="check bad"><div class="mark">✗</div><div class="body"><div class="t">Сервер не ответил</div><div class="d">${esc(e.message)}</div></div></div>`; return; }
+
+  box.innerHTML = data.checks.map(c => `
+    <div class="check ${c.ok ? 'ok' : 'bad'}">
+      <div class="mark">${c.ok ? '✓' : '✗'}</div>
+      <div class="body">
+        <div class="t">${esc(c.title)}</div>
+        <div class="d">${esc(c.detail)}</div>
+        ${!c.ok && c.fix ? `<div class="fix">→ ${esc(c.fix)}</div>` : ''}
+      </div>
+    </div>`).join('') +
+    `<div class="hint" style="margin-top:10px">Режим бота: <b>${esc(data.botMode)}</b> · API: <code>${esc(data.apiBase)}</code></div>`;
 }
 
 // ---------- Заказы ----------
@@ -1088,6 +1288,7 @@ $('loginBtn').onclick = async () => {
 };
 $('tokenInput').onkeydown = e => { if(e.key === 'Enter') $('loginBtn').click(); };
 $('saveBtn').onclick = saveSettings;
+$('previewReload').onclick = () => { $('previewFrame').contentWindow.location.reload(); };
 
 // автологин в пределах сессии, чтобы не вводить токен после каждого обновления
 try{
