@@ -65,6 +65,15 @@
   .switch-thumb{width:18px;height:18px;background:var(--text);position:absolute;top:3px;left:3px;transition:transform .15s}
   .switch-track.on .switch-thumb{transform:translateX(18px);background:var(--bg)}
 
+  .marks{display:grid;grid-template-columns:repeat(auto-fill,minmax(48px,1fr));gap:8px}
+  .mark{
+    aspect-ratio:1;border:2px solid var(--surface-2);background:var(--surface-2);
+    display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text);
+    transition:border-color .15s,color .15s;
+  }
+  .mark:hover{border-color:var(--muted)}
+  .mark.active{border-color:var(--accent);color:var(--accent)}
+
   .presets{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px}
   .preset{border:2px solid var(--surface-2);padding:8px;cursor:pointer;text-align:center}
   .preset.active{border-color:var(--accent)}
@@ -211,7 +220,9 @@
   </div>
 </div>
 
-<script src="/shared.js"></script>
+<!-- ?v= бампается при релизе: страхует от промежуточных прокси, которые
+     игнорируют no-cache и держат старый shared.js поверх новой разметки -->
+<script src="/shared.js?v=2.1"></script>
 <script>
 let TOKEN = '';
 let settings = null;
@@ -458,10 +469,13 @@ function buildPanel(id){
   if(id === 'orders')    return buildOrders();
   if(id === 'brand'){
     renderPanel('panel-brand', PANEL_BRAND());
-    const preview = $('logoPreview');
-    preview.innerHTML = settings.brand.logoImage
-      ? `<img src="/api/image?id=${encodeURIComponent(settings.brand.logoImage)}">` : PLACEHOLDER_SVG;
+    renderLogoPreview();
+    renderMarkGrid();
     $('logoInput').onchange = onLogoSelected;
+    $('logoClear').onclick = () => {
+      settings.brand.logoImage = '';
+      markDirty(); renderLogoPreview(); refreshPreview();
+    };
     return;
   }
   if(id === 'theme')     return buildTheme();
@@ -479,16 +493,22 @@ function buildPanel(id){
 const PANEL_BRAND = () => ([
   { title:'Название и иконка', fields:[
     F.text('brand.shopName','Название магазина', { ph:'MY SHOP' }),
-    F.text('brand.shopIcon','Иконка (эмодзи)', { ph:'🛒', maxlength:4, sub:'Показывается слева от названия, если не загружен логотип' }),
+    F.text('brand.shopIcon','Эмодзи', { ph:'🛒', maxlength:4, sub:'Используется, если не выбран знак и не загружен логотип' }),
     F.text('brand.tagline','Подзаголовок', { ph:'ручная работа с 2014 года' }),
     F.sw('brand.showTagline','Показывать подзаголовок'),
     F.sel('brand.headerStyle','Стиль шапки', [['bar','Полоса с акцентом'],['minimal','Минимал'],['banner','Баннер']]),
   ], html:`
-    <div class="field" style="margin-top:12px">
-      <label>Логотип (заменяет эмодзи)</label>
+    <div class="field" style="margin-top:14px">
+      <label>Готовый знак</label>
+      <div class="marks" id="markGrid"></div>
+      <div class="sub">Одноцветный знак — принимает цвет темы. Отменить: выбрать «Эмодзи».</div>
+    </div>
+    <div class="field" style="margin-top:14px">
+      <label>Свой логотип (старше знака и эмодзи)</label>
       <div class="upload-box">
         <div class="upload-preview" id="logoPreview"></div>
-        <label class="upload-label"><input type="file" accept="image/*" id="logoInput"><span class="btn-fake">Загрузить лого</span></label>
+        <label class="upload-label"><input type="file" accept="image/*" id="logoInput"><span class="btn-fake">Загрузить</span></label>
+        <button type="button" class="ghost" id="logoClear" style="padding:8px 12px;font-size:11px">Убрать</button>
       </div>
       <div class="sub">Квадратная картинка, ~200×200. Хранится на вашем сервере.</div>
     </div>`},
@@ -498,6 +518,30 @@ const PANEL_BRAND = () => ([
     F.sw('profile.showFavorites','Пункт «Избранное» в профиле'),
   ]},
 ]);
+
+function renderLogoPreview(){
+  const preview = $('logoPreview');
+  if(!preview) return;
+  preview.innerHTML = settings.brand.logoImage
+    ? `<img src="/api/image?id=${encodeURIComponent(settings.brand.logoImage)}">`
+    : (logoMarkSVG(settings.brand.logoMark, 30) || `<span style="font-size:24px">${esc(settings.brand.shopIcon || '🛒')}</span>`);
+}
+
+function renderMarkGrid(){
+  const box = $('markGrid');
+  if(!box) return;
+  box.innerHTML = Object.entries(LOGO_MARKS).map(([key, m]) => `
+    <div class="mark ${settings.brand.logoMark === key ? 'active' : ''}" data-mark="${key}" title="${esc(m.label)}">
+      ${m.svg ? logoMarkSVG(key, 22) : `<span style="font-size:18px">${esc(settings.brand.shopIcon || '🛒')}</span>`}
+    </div>`).join('');
+  box.querySelectorAll('[data-mark]').forEach(el => el.onclick = () => {
+    settings.brand.logoMark = el.dataset.mark;
+    markDirty();
+    renderMarkGrid();
+    renderLogoPreview();
+    refreshPreview();
+  });
+}
 
 // ---------- Тема ----------
 function buildTheme(){
@@ -1036,10 +1080,14 @@ function resizeToDataUrl(img, maxW, quality){
   // WebP при том же качестве весит на 25-35% меньше JPEG — на глаз разницы нет
   return canvas.toDataURL('image/webp', quality);
 }
-// две версии из одного файла: миниатюра для сетки, полная — для карусели
+// Две версии из одного файла: миниатюра для сетки, «полная» — для карусели.
+// 1200px было избыточно: карусель занимает ширину экрана телефона (360–430 CSS-px),
+// то есть даже на 3x-экране хватает 900px. Лишние 300px давали +40% к весу файла
+// без единого видимого пикселя разницы. Качество 0.78 для WebP на фото
+// неотличимо от 0.82 на глаз, но заметно легче.
 async function resizeImage(file){
   const img = await loadImageEl(file);
-  return { full: resizeToDataUrl(img, 1200, 0.82), thumb: resizeToDataUrl(img, 400, 0.75) };
+  return { full: resizeToDataUrl(img, 900, 0.78), thumb: resizeToDataUrl(img, 400, 0.7) };
 }
 
 async function onPhotoSelected(e, slotIndex){
@@ -1244,6 +1292,7 @@ async function onLogoSelected(e){
     settings.brand.logoImage = res.id;
     markDirty();
     preview.innerHTML = `<img src="${thumb}">`;
+    refreshPreview();
   }catch(err){
     alert('Не удалось загрузить логотип: ' + err.message);
     preview.innerHTML = PLACEHOLDER_SVG;

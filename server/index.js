@@ -7,6 +7,7 @@ const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const zlib = require('node:zlib');
 
 // Мини-загрузчик .env — чтобы `node server/index.js` работал и без systemd,
 // который в проде подставляет переменные сам через EnvironmentFile.
@@ -38,6 +39,8 @@ if (!ADMIN_TOKEN) {
 }
 
 // ---------- утилиты ----------
+const TEXTUAL = new Set(['.html', '.js', '.css', '.json', '.svg']);
+
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8',
@@ -124,9 +127,35 @@ async function serveStatic(req, res, urlPath) {
     const stat = await fsp.stat(full);
     if (stat.isDirectory()) throw new Error('dir');
     const ext = path.extname(full).toLowerCase();
-    // html не кэшируем — иначе после правки настроек клиент час видит старую витрину
-    const cacheControl = ext === '.html' ? 'no-cache' : 'public, max-age=3600';
-    res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Cache-Control': cacheControl, 'Content-Length': stat.size });
+    // HTML и JS обязаны проверяться на свежесть при каждом заходе. Раньше html
+    // шёл no-cache, а shared.js — на час: после обновления клиент час крутил
+    // старый скрипт поверх новой разметки и падал на несуществующих функциях.
+    // no-cache не значит «качать заново» — это условный запрос, при совпадении
+    // ETag сервер отвечает 304 и тело не передаётся.
+    const cacheControl = (ext === '.html' || ext === '.js' || ext === '.css')
+      ? 'no-cache'
+      : 'public, max-age=31536000, immutable'; // картинки лежат под уникальными именами
+    // ETag из размера и времени изменения: при no-cache браузер пришлёт
+    // If-None-Match, и мы ответим 304 вместо повторной отдачи файла
+    const etag = `W/"${stat.size.toString(16)}-${stat.mtimeMs.toString(36)}"`;
+    if (req.headers['if-none-match'] === etag) {
+      res.writeHead(304, { ETag: etag, 'Cache-Control': cacheControl });
+      return res.end();
+    }
+    const headers = { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Cache-Control': cacheControl, ETag: etag };
+
+    // Текстовые файлы сжимаем: index.html — это ~70 КБ разметки со стилями и
+    // скриптом в одном файле, gzip срезает его примерно вчетверо. Картинки и
+    // шрифты не трогаем — они уже сжаты, повторное сжатие только греет процессор.
+    if (TEXTUAL.has(ext) && /\bgzip\b/.test(req.headers['accept-encoding'] || '')) {
+      headers['Content-Encoding'] = 'gzip';
+      headers['Vary'] = 'Accept-Encoding';
+      res.writeHead(200, headers);
+      return fs.createReadStream(full).pipe(zlib.createGzip({ level: 6 })).pipe(res);
+    }
+
+    headers['Content-Length'] = stat.size;
+    res.writeHead(200, headers);
     fs.createReadStream(full).pipe(res);
   } catch (e) {
     res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });

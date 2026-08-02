@@ -61,7 +61,47 @@ const THEME_PRESETS = {
     text: '#eaffc7', muted: '#8fa06a', accent: '#c6ff00', accent2: '#ff4d00',
     radius: 0, borderWidth: 2, fontDisplay: 'Archivo Black', uppercase: true,
   },
+  // Под аудиторию, которой близок ERD: почти чёрный холст, белый как акцент,
+  // кровяной красный точечно. Ноль скруглений, волосяные рамки, крупный капслок —
+  // интерфейс уходит на второй план, работает фотография.
+  erd: {
+    label: 'ERD',
+    bg: '#0a0a0a', surface: '#101010', surface2: '#1a1a1a',
+    text: '#f5f4f0', muted: '#7b7873', accent: '#ffffff', accent2: '#c8102e',
+    radius: 0, borderWidth: 1, fontDisplay: 'Oswald', uppercase: true,
+  },
+  // Логика досок объявлений: светло, плотно, скруглённо. Бирюзовый акцент
+  // читается как «безопасная сделка», цена и состояние выходят на первый план.
+  market: {
+    label: 'Маркет',
+    bg: '#ffffff', surface: '#ffffff', surface2: '#f1f4f5',
+    text: '#16191c', muted: '#6b7280', accent: '#007782', accent2: '#0f172a',
+    radius: 14, borderWidth: 0, fontDisplay: 'Inter', uppercase: false,
+  },
 };
+
+// Готовые фирменные знаки — альтернатива эмодзи для тех, кому нужен свой логотип,
+// но рисовать его негде. Одноцветные: наследуют currentColor, поэтому одинаково
+// хорошо ложатся на любую тему.
+const LOGO_MARKS = {
+  '': { label: 'Эмодзи', svg: '' },
+  bolt:    { label: 'Молния',  svg: '<path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/>' },
+  star:    { label: 'Звезда',  svg: '<path d="M12 2l2.9 6.6 7.1.7-5.4 4.7 1.6 7-6.2-3.7L5.8 21l1.6-7L2 9.3l7.1-.7L12 2z"/>' },
+  flame:   { label: 'Пламя',   svg: '<path d="M12 2c1 4-3 5-3 9a3 3 0 0 0 6 0c0-1-.5-2-.5-2 2 1 3.5 3 3.5 5a6 6 0 0 1-12 0c0-5 6-6 6-12z"/>' },
+  tag:     { label: 'Ярлык',   svg: '<path d="M2 11.5V3a1 1 0 0 1 1-1h8.5L22 12.5 12.5 22 2 11.5zM7 7.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/>' },
+  hanger:  { label: 'Вешалка', svg: '<path d="M12 2a3 3 0 0 0-3 3h2a1 1 0 1 1 1 1c-.6 0-1 .4-1 1v1.2L2.5 14c-.9.6-.5 2 .6 2h17.8c1.1 0 1.5-1.4.6-2L13 8.2V7.9A3 3 0 0 0 12 2z"/>' },
+  diamond: { label: 'Ромб',    svg: '<path d="M12 1.5 22.5 12 12 22.5 1.5 12 12 1.5z"/>' },
+  skull:   { label: 'Череп',   svg: '<path d="M12 2C7 2 3 5.6 3 10c0 2.7 1.5 5 3.8 6.4V20a2 2 0 0 0 2 2h6.4a2 2 0 0 0 2-2v-3.6C19.5 15 21 12.7 21 10c0-4.4-4-8-9-8zM8.5 12a2 2 0 1 1 0-4 2 2 0 0 1 0 4zm7 0a2 2 0 1 1 0-4 2 2 0 0 1 0 4z"/>' },
+  cross:   { label: 'Крест',   svg: '<path d="M10 2h4v6h6v4h-6v10h-4V12H4V8h6V2z"/>' },
+  eye:     { label: 'Глаз',    svg: '<path d="M12 4C5 4 1 12 1 12s4 8 11 8 11-8 11-8-4-8-11-8zm0 12a4 4 0 1 1 0-8 4 4 0 0 1 0 8z"/>' },
+};
+
+// Возвращает готовый <svg> знака или пустую строку, если знак не выбран.
+function logoMarkSVG(key, size = 26) {
+  const m = LOGO_MARKS[key];
+  if (!m || !m.svg) return '';
+  return `<svg viewBox="0 0 24 24" fill="currentColor" width="${size}" height="${size}" aria-hidden="true">${m.svg}</svg>`;
+}
 
 const FONT_STACKS = {
   'Oswald': "'Oswald',sans-serif",

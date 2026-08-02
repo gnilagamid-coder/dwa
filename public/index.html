@@ -7,7 +7,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
-<script src="/shared.js"></script>
+<!-- ?v= бампается при релизе: страхует от промежуточных прокси, которые
+     игнорируют no-cache и держат старый shared.js поверх новой разметки -->
+<script src="/shared.js?v=2.1"></script>
 <style>
   :root{
     /* дефолты до загрузки настроек — чтобы первый кадр не был белым «мигом» */
@@ -142,10 +144,17 @@
   }
   body.diagonal .featured-badge{transform:rotate(-6deg)}
   @keyframes stampIn{0%{opacity:0;transform:scale(1.7)}60%{opacity:1;transform:scale(.9)}100%{transform:scale(1)}}
-  .card-body{padding:10px 12px 12px;display:flex;justify-content:space-between;align-items:center;gap:6px}
-  .card-name{font-size:calc(13px * var(--fs));font-weight:600;margin-bottom:4px;line-height:1.3}
-  .card-price{font-family:var(--font-display);font-size:calc(15px * var(--fs));color:var(--accent-2);font-weight:600}
-  .card-old-price{font-size:calc(11px * var(--fs));color:var(--muted);text-decoration:line-through;margin-left:5px}
+  /* Карточка: цена — главный элемент для авито-аудитории, поэтому она идёт
+     первой строкой и крупнее названия. Название ограничено двумя строками,
+     иначе длинные наименования ломали высоту ряда в сетке. */
+  .card-body{padding:calc(10px * var(--gap)) 12px calc(12px * var(--gap));display:flex;justify-content:space-between;align-items:flex-end;gap:8px}
+  .card-info{min-width:0;flex:1}
+  .card-price{font-family:var(--font-display);font-size:calc(17px * var(--fs));color:var(--accent-2);font-weight:600;letter-spacing:.2px;line-height:1.1}
+  .card-name{
+    font-size:calc(13px * var(--fs));font-weight:500;margin-top:5px;line-height:1.35;color:var(--muted);
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+  }
+  .card-old-price{font-size:calc(11px * var(--fs));color:var(--muted);text-decoration:line-through;margin-left:6px;font-weight:400}
 
   /* скелетоны — вместо «прыжка» пустой сетки при загрузке */
   .skeleton{background:var(--surface);border:var(--bw) solid var(--surface-2);border-radius:var(--radius);overflow:hidden}
@@ -265,6 +274,29 @@
   .secondary-btn{width:100%;margin-top:10px;padding:15px;background:var(--surface-2);border:var(--bw) solid var(--surface-2);color:var(--text);font-weight:600;font-size:calc(13px * var(--fs));border-radius:var(--radius);min-height:48px}
   .secondary-btn:disabled{opacity:.4}
 
+  /* просмотр фото на весь экран */
+  .lightbox{
+    position:fixed;inset:0;z-index:60;background:#000;
+    display:flex;align-items:center;justify-content:center;
+    animation:lbIn .18s ease-out both;
+  }
+  .lightbox[hidden]{display:none}
+  @keyframes lbIn{from{opacity:0}to{opacity:1}}
+  /* pinch-zoom отдаём браузеру: свой жест никогда не будет таким же плавным,
+     как нативный, а на iOS ещё и конфликтует с системным зумом */
+  .lightbox-stage{width:100%;height:100%;overflow:auto;touch-action:pinch-zoom;display:flex;align-items:center;justify-content:center}
+  .lightbox-stage img{max-width:100%;max-height:100%;object-fit:contain;display:block}
+  .lightbox-close{
+    position:absolute;top:calc(12px + var(--safe-top));right:12px;z-index:2;
+    width:44px;height:44px;background:rgba(255,255,255,.14);color:#fff;
+    display:flex;align-items:center;justify-content:center;border-radius:var(--radius);
+  }
+  .lightbox-close svg{width:18px;height:18px}
+  .lightbox-hint{
+    position:absolute;bottom:calc(20px + var(--safe-bottom));left:50%;transform:translateX(-50%);
+    color:rgba(255,255,255,.5);font-size:12px;pointer-events:none;
+  }
+
   .toast{
     position:fixed;left:50%;bottom:calc(90px + var(--safe-bottom));transform:translate(-50%,10px);
     background:var(--surface-2);color:var(--text);border:var(--bw) solid var(--accent);
@@ -278,10 +310,16 @@
   .field{margin-bottom:14px}
   .field label{display:block;font-family:var(--font-display);font-size:calc(11px * var(--fs));letter-spacing:.3px;text-transform:var(--caps);color:var(--muted);margin-bottom:6px}
   .field input,.field select,.field textarea{
-    width:100%;background:var(--surface-2);border:var(--bw) solid var(--surface-2);color:var(--text);
-    padding:13px 12px;font-size:16px;font-family:inherit;border-radius:var(--radius);
+    width:100%;background:var(--surface-2);border:max(1px, var(--bw)) solid transparent;color:var(--text);
+    padding:14px 13px;font-size:16px;font-family:inherit;border-radius:var(--radius);
+    transition:border-color .15s,box-shadow .15s;
   }
-  .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--accent)}
+  /* видимое кольцо фокуса: на темах с borderWidth:0 одна смена цвета рамки
+     была практически незаметна, и было непонятно, какое поле активно */
+  .field input:focus,.field select:focus,.field textarea:focus{
+    border-color:var(--accent);
+    box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+  }
   .field textarea{resize:vertical;min-height:66px}
   .field.invalid input,.field.invalid textarea{border-color:var(--accent)}
   .field-error{color:var(--accent);font-size:calc(11px * var(--fs));margin-top:4px}
@@ -438,6 +476,15 @@
       <button class="secondary-btn" id="detailCartBtn">+ Добавить в корзину</button>
     </div>
   </div>
+</div>
+
+<!-- полноэкранный просмотр фото: pinch-zoom отдан браузеру через touch-action -->
+<div class="lightbox" id="lightbox" hidden>
+  <button class="lightbox-close" id="lightboxClose" aria-label="Закрыть">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+  </button>
+  <div class="lightbox-stage" id="lightboxStage"><img id="lightboxImg" alt=""></div>
+  <div class="lightbox-hint">Двумя пальцами — приблизить</div>
 </div>
 
 <button class="fab-cart" id="cartBtn" aria-label="Корзина">
@@ -630,9 +677,9 @@ function renderGrid(){
         ${c.showStock ? (soldOut ? '<span class="stock-badge">Раскуплено</span>' : low ? `<span class="stock-badge">Осталось ${p.stock}</span>` : '') : ''}
       </div>
       <div class="card-body">
-        <div data-id="${p.id}" data-open="1" style="min-width:0">
-          <div class="card-name">${esc(p.name)}</div>
+        <div class="card-info" data-id="${p.id}" data-open="1">
           <div class="card-price">${priceHTML(p)}</div>
+          <div class="card-name">${esc(p.name)}</div>
         </div>
         ${showAdd ? `<button class="card-add" data-id="${p.id}" ${soldOut ? 'disabled' : ''} aria-label="В корзину">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
@@ -655,8 +702,42 @@ function renderGrid(){
 /* ===================== ГАЛЕРЕЯ ===================== */
 let galleryIndex = 0;
 let galleryCount = 0;
+let galleryUrls = [];
 let swipeState = null;
 let swipeAttached = false;
+let gestureMoved = false; // была ли протяжка — чтобы свайп не считался тапом
+
+// Полноэкранный просмотр. Масштабирование делает сам браузер (touch-action:
+// pinch-zoom) — это плавнее и привычнее любой самописной реализации.
+function openLightbox(index){
+  const box = document.getElementById('lightbox');
+  document.getElementById('lightboxImg').src = galleryUrls[index] || '';
+  box.hidden = false;
+  haptic.tap();
+  if(!sheetStack.includes('lightbox')) sheetStack.push('lightbox');
+  syncBackButton();
+}
+function closeLightbox(){
+  const box = document.getElementById('lightbox');
+  if(box.hidden) return;
+  box.hidden = true;
+  const i = sheetStack.indexOf('lightbox');
+  if(i !== -1) sheetStack.splice(i, 1);
+  syncBackButton();
+}
+
+// Догружает картинку слайда и его соседей — так следующий свайп уже готов,
+// а трафик не тратится на фото, до которых покупатель не долистал.
+function ensureSlidesLoaded(index){
+  const slides = document.querySelectorAll('.detail-gallery-slide img');
+  [index - 1, index, index + 1].forEach(i => {
+    const img = slides[i];
+    if(img && img.dataset.src){
+      img.src = img.dataset.src;
+      delete img.dataset.src;
+    }
+  });
+}
 
 function initGallery(images){
   const gallery = document.getElementById('detailGallery');
@@ -671,8 +752,15 @@ function initGallery(images){
   galleryIndex = 0;
   galleryCount = images.length;
 
+  // Раньше сюда сразу подставлялись src всех фото — открытие товара с шестью
+  // снимками тянуло шесть полноразмерных картинок разом, и карточка «висела».
+  // Теперь грузим только текущий слайд и соседние, остальные ждут в data-src.
+  galleryUrls = images.map(id => `/api/image?id=${encodeURIComponent(id)}`);
   track.innerHTML = images.length
-    ? images.map(id => `<div class="detail-gallery-slide"><img src="/api/image?id=${encodeURIComponent(id)}" alt="" draggable="false"></div>`).join('')
+    ? images.map((id, i) => `<div class="detail-gallery-slide">
+        <img ${i === 0 ? `src="${galleryUrls[0]}" fetchpriority="high"` : `data-src="${galleryUrls[i]}"`}
+             alt="Фото ${i + 1}" draggable="false" decoding="async">
+      </div>`).join('')
     : `<div class="detail-gallery-slide">${PLACEHOLDER_SVG}</div>`;
 
   dots.innerHTML = images.length > 1
@@ -696,6 +784,7 @@ function initGallery(images){
   gallery.style.animation = '';
 
   setupSwipeOnce();
+  ensureSlidesLoaded(0);
   updateGalleryUI();
 }
 
@@ -711,6 +800,7 @@ function goToSlide(index){
   if(clamped !== galleryIndex) haptic.tap();
   galleryIndex = clamped;
   track.style.transform = `translate3d(${trackOffset(galleryIndex)}px,0,0)`;
+  ensureSlidesLoaded(galleryIndex);
   updateGalleryUI();
 }
 
@@ -733,6 +823,7 @@ function setupSwipeOnce(){
   const getPoint = e => (e.touches && e.touches[0]) ? e.touches[0] : e;
 
   const start = (e) => {
+    gestureMoved = false;
     if(galleryCount <= 1) return;
     const pt = getPoint(e);
     swipeState = { startX: pt.clientX, startY: pt.clientY, dx: 0, axis: null, width: gallery.offsetWidth };
@@ -747,6 +838,7 @@ function setupSwipeOnce(){
 
     // осевой лок: решаем один раз за жест. Без него вертикальный скролл
     // внутри карточки дёргает слайдер, а горизонтальный свайп — страницу.
+    if(Math.abs(dx) > 8 || Math.abs(dy) > 8) gestureMoved = true; // это протяжка, не тап
     if(!swipeState.axis && (Math.abs(dx) > 6 || Math.abs(dy) > 6)){
       swipeState.axis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
       if(swipeState.axis === 'y'){ cancelSwipe(); return; }
@@ -782,6 +874,13 @@ function setupSwipeOnce(){
     goToSlide(galleryIndex);
   };
 
+  // Тап без протяжки — открыть фото на весь экран. Порог 8px отличает тап от
+  // начала свайпа, иначе лайтбокс выскакивал бы при каждом листании.
+  gallery.addEventListener('click', () => {
+    if(swipeState || gestureMoved || !galleryUrls.length) return;
+    openLightbox(galleryIndex);
+  });
+
   gallery.addEventListener('touchstart', start, { passive: true });
   gallery.addEventListener('touchmove', move, { passive: false });
   gallery.addEventListener('touchend', end);
@@ -808,6 +907,15 @@ function setupSwipeOnce(){
 
 let currentProduct = null;
 
+// Перерисовка одного сердечка в карточке — вместо переоткрытия всей карточки.
+function syncDetailFav(id){
+  const favBtn = document.getElementById('detailFavBtn');
+  const on = favorites.has(id);
+  favBtn.classList.toggle('active', on);
+  favBtn.querySelector('svg').setAttribute('fill', on ? 'currentColor' : 'none');
+  favBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+}
+
 function openDetail(id){
   const p = products.find(x => x.id === id);
   if(!p) return;
@@ -827,9 +935,11 @@ function openDetail(id){
 
   const favBtn = document.getElementById('detailFavBtn');
   favBtn.style.display = m.enableFavorites ? '' : 'none';
-  favBtn.classList.toggle('active', favorites.has(id));
-  favBtn.querySelector('svg').setAttribute('fill', favorites.has(id) ? 'currentColor' : 'none');
-  favBtn.onclick = () => { toggleFav(id); openDetail(id); };
+  syncDetailFav(id);
+  // Раньше здесь переоткрывалась вся карточка ради перерисовки сердечка. Побочно
+  // это: (1) накручивало счётчик просмотров на каждый лайк, (2) сбрасывало
+  // галерею на первое фото. Теперь перерисовываем одну кнопку.
+  favBtn.onclick = () => { toggleFav(id); syncDetailFav(id); };
 
   const buyBtn = document.getElementById('detailBuyBtn');
   const cartBtn = document.getElementById('detailCartBtn');
@@ -886,6 +996,20 @@ function renderFavList(){
 function cartIds(){ return [...cart.keys()].filter(id => products.some(p => p.id === id)); }
 function cartTotal(){ return cartIds().reduce((sum,id)=> sum + products.find(x=>x.id===id).price * cart.get(id), 0); }
 
+// Предмет заявки в режиме «inquiry» — живёт отдельно от корзины, чтобы
+// оформление одного товара не стирало то, что покупатель уже набрал.
+let inquiryItem = null;
+function orderItems(){
+  if(inquiryItem && products.some(p => p.id === inquiryItem)) return [{ id: inquiryItem, qty: 1 }];
+  return cartIds().map(id => ({ id, qty: cart.get(id) }));
+}
+function orderTotal(){
+  return orderItems().reduce((sum, i) => {
+    const p = products.find(x => x.id === i.id);
+    return sum + (p ? p.price * i.qty : 0);
+  }, 0);
+}
+
 function renderCart(){
   if(!settings) return; // в превью настройки приходят асинхронно из админки
   const ids = cartIds();
@@ -919,7 +1043,7 @@ function renderCart(){
     <div class="cart-total"><span>Итого</span><span>${m.priceHidden ? '—' : fmt(total)}</span></div>
     ${below ? `<div class="banner" style="margin:0 0 12px">До минимального заказа не хватает ${fmt(m.minOrder - total)}</div>` : ''}
     ${settings.manager.buyUrl ? `<button class="secondary-btn" id="cartMessageBtn" style="margin:0 0 10px">Написать менеджеру</button>` : ''}
-    ${m.mode === 'cart' ? `<button class="checkout-btn" id="checkoutBtn" ${below ? 'disabled' : ''}>${esc(m.ctaCart || 'Оформить заказ')}</button>` : ''}
+    ${m.mode === 'cart' && !hasNativeMainButton() ? `<button class="checkout-btn" id="checkoutBtn" ${below ? 'disabled' : ''}>${esc(m.ctaCart || 'Оформить заказ')}</button>` : ''}
   `;
   list.querySelectorAll('.qty button').forEach(btn=>{
     btn.onclick = () => changeQty(Number(btn.dataset.id), btn.dataset.op);
@@ -973,9 +1097,17 @@ function themeHex(varName){
   const v = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
   return HEX_RE.test(v) ? v : undefined;
 }
+// Нативная MainButton есть только внутри настоящего клиента Telegram. В обычном
+// браузере объект тоже существует, но кнопка не отрисовывается — там нужна своя.
+// От этого зависит, рисовать ли кнопку в шторке: иначе выходит две «Оформить заказ»
+// разом, одна поверх другой.
+function hasNativeMainButton(){
+  return !!(tg && tg.MainButton && tg.platform && tg.platform !== 'unknown');
+}
+
 function syncMainButton(){
   const mb = tg?.MainButton;
-  if(!mb || !settings) return;
+  if(!mb || !settings || !hasNativeMainButton()) return;
   const cartOpen = document.getElementById('cartOverlay').classList.contains('open');
   const total = cartTotal();
   if(cartOpen && cartIds().length && settings.commerce.mode === 'cart'){
@@ -1079,10 +1211,12 @@ function quickBuy(p){
   }
 
   if(m.mode === 'inquiry'){
-    cart.clear(); cart.set(p.id, 1);
-    updateCartUI();
+    // Раньше здесь делался cart.clear() — заявка по одному товару стирала всё,
+    // что покупатель успел набрать. Держим предмет заявки отдельно от корзины.
+    inquiryItem = p.id;
+    renderCheckoutForm();
     closeSheet('detailOverlay');
-    openCheckoutForm();
+    openSheet('checkoutOverlay');
     return;
   }
 
@@ -1098,6 +1232,9 @@ function selectField(id, label, options){
 function openCheckoutForm(){
   if(!cartIds().length) return;
   renderCheckoutForm();
+  // Корзину закрываем: две шторки одновременно накладывались друг на друга —
+  // форма заказа открывалась поверх, а корзина продолжала просвечивать сзади.
+  closeSheet('cartOverlay');
   openSheet('checkoutOverlay');
 }
 
@@ -1221,7 +1358,6 @@ function updateFavUI(){
   badge.style.display = n ? 'flex' : 'none';
   badge.textContent = n;
   if(n) pulse(badge);
-  renderGrid();
   renderFavList();
   renderProfileMenu();
   saveState();
@@ -1230,6 +1366,16 @@ function updateFavUI(){
 function toggleFav(id){
   favorites.has(id) ? favorites.delete(id) : favorites.add(id);
   haptic.tap();
+  // Точечно перекрашиваем одно сердечко вместо перерисовки всей сетки:
+  // полный renderGrid перезапускал анимацию появления у всех карточек, и лайк
+  // выглядел как «страница моргнула».
+  const on = favorites.has(id);
+  const btn = document.querySelector(`.card-fav[data-id="${id}"]`);
+  if(btn){
+    btn.classList.toggle('active', on);
+    btn.querySelector('svg').setAttribute('fill', on ? 'currentColor' : 'none');
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  }
   updateFavUI();
 }
 
@@ -1250,7 +1396,10 @@ function closeSheet(id){
 }
 function closeTopSheet(){
   const top = sheetStack[sheetStack.length - 1];
-  if(top){ haptic.tap(); closeSheet(top); }
+  if(!top) return;
+  haptic.tap();
+  // лайтбокс — не .overlay, у него своя механика показа
+  if(top === 'lightbox') closeLightbox(); else closeSheet(top);
 }
 // BackButton Telegram вместо кастомной «назад»: аппаратная кнопка Android и
 // свайп-назад на iOS ведут себя ожидаемо только через неё.
@@ -1277,6 +1426,10 @@ document.querySelectorAll('.overlay').forEach(ov=>{
 document.querySelectorAll('[data-close]').forEach(btn=>{
   btn.onclick = () => { haptic.tap(); closeSheet(btn.closest('.overlay').id); };
 });
+document.getElementById('lightboxClose').onclick = closeLightbox;
+document.getElementById('lightbox').addEventListener('click', e => {
+  if(e.target.id !== 'lightboxImg') closeLightbox();
+});
 
 function renderProfileMenu(){
   const menu = document.getElementById('profileMenu');
@@ -1293,6 +1446,25 @@ function renderProfileMenu(){
   }
   menu.innerHTML = items.map((it, i) => `<div class="menu-item" data-i="${i}"><span>${esc(it.label)}</span> ›</div>`).join('');
   menu.querySelectorAll('.menu-item').forEach((el, i) => { el.onclick = () => { haptic.tap(); items[i].onClick(); }; });
+}
+
+// Favicon генерируем на лету из знака магазина и цвета темы — отдельный файл
+// заводить не нужно, и он автоматически совпадает с оформлением витрины.
+function applyFavicon(s){
+  const accent = themeHex('--accent') || '#e8341c';
+  const bg = themeHex('--bg') || '#0d0d0d';
+  const mark = LOGO_MARKS[s.brand.logoMark];
+  const inner = mark && mark.svg
+    ? `<g fill="${accent}" transform="translate(8 8) scale(1.33)">${mark.svg}</g>`
+    : `<text x="50%" y="54%" font-size="30" text-anchor="middle" dominant-baseline="middle">${esc(s.brand.shopIcon || '🛒')}</text>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><rect width="48" height="48" fill="${bg}"/>${inner}</svg>`;
+  let link = document.getElementById('favicon');
+  if(!link){
+    link = document.createElement('link');
+    link.id = 'favicon'; link.rel = 'icon'; link.type = 'image/svg+xml';
+    document.head.appendChild(link);
+  }
+  link.href = 'data:image/svg+xml,' + encodeURIComponent(svg);
 }
 
 // --- применение настроек к витрине ---
@@ -1333,9 +1505,13 @@ function applySettings(s){
 
   // бренд
   document.title = s.brand.shopName;
-  document.getElementById('shopLogo').innerHTML = s.brand.logoImage
-    ? `<img src="/api/image?id=${encodeURIComponent(s.brand.logoImage)}" alt=""><span class="logo-text">${esc(s.brand.shopName)}</span>`
-    : `<span>${esc(s.brand.shopIcon)}</span><span class="logo-text">${esc(s.brand.shopName)}</span>`;
+  // Приоритет знака: загруженная картинка → готовый знак → эмодзи.
+  // Так продавец может начать с эмодзи и потом заменить его, ничего не сбрасывая.
+  const mark = s.brand.logoImage
+    ? `<img src="/api/image?id=${encodeURIComponent(s.brand.logoImage)}" alt="">`
+    : (logoMarkSVG(s.brand.logoMark) || `<span>${esc(s.brand.shopIcon)}</span>`);
+  document.getElementById('shopLogo').innerHTML = `${mark}<span class="logo-text">${esc(s.brand.shopName)}</span>`;
+  applyFavicon(s);
   document.getElementById('appHeader').className = s.brand.headerStyle === 'minimal' ? 'minimal' : '';
   const tagline = document.getElementById('tagline');
   tagline.style.display = s.brand.showTagline && s.brand.tagline ? '' : 'none';

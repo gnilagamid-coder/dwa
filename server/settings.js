@@ -11,7 +11,8 @@ const DEFAULTS = {
   brand: {
     shopName: 'MY SHOP',
     shopIcon: '🛒',
-    logoImage: '',          // id картинки, пусто = используем shopIcon
+    logoMark: '',           // ключ готового знака из LOGO_MARKS, пусто = эмодзи
+    logoImage: '',          // id загруженной картинки — старше знака и эмодзи
     tagline: '',            // подзаголовок под названием в шапке
     showTagline: false,
     headerStyle: 'bar',     // bar | banner | minimal
@@ -186,6 +187,7 @@ function sanitize(input) {
     brand: {
       shopName: str(b.shopName, 'MY SHOP', 40).trim() || 'MY SHOP',
       shopIcon: str(b.shopIcon, '🛒', 4),
+      logoMark: str(b.logoMark, '', 24),
       logoImage: str(b.logoImage, '', 64),
       tagline: str(b.tagline, '', 80),
       showTagline: bool(b.showTagline),
