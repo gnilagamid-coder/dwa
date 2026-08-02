@@ -1,0 +1,1102 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Админка магазина</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0d0d0d; --surface:#161616; --surface-2:#202020;
+    --text:#f2efe6; --muted:#8a8880; --accent:#e8341c; --accent-2:#f2c94c; --danger:#e8341c;
+    --font-display:'Oswald',sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;min-height:100vh;padding:0 0 90px;-webkit-tap-highlight-color:transparent}
+  button,input,textarea,select{font:inherit;color:inherit}
+  input,textarea,select{background:var(--surface-2);border:1px solid var(--surface-2);padding:10px 12px;outline:none;width:100%;font-size:15px}
+  input:focus,textarea:focus,select:focus{border-color:var(--accent)}
+  textarea{resize:vertical;min-height:70px;font-size:14px;line-height:1.5}
+  input[type=color]{padding:2px;height:38px;cursor:pointer}
+  input[type=range]{padding:0;accent-color:var(--accent)}
+  button{background:var(--accent);color:var(--text);border:none;padding:11px 16px;font-family:var(--font-display);letter-spacing:.4px;text-transform:uppercase;font-weight:600;cursor:pointer;transition:opacity .15s}
+  button:active{opacity:.75}
+  button.secondary{background:var(--surface-2);color:var(--text)}
+  button.ghost{background:transparent;border:1px solid var(--surface-2);color:var(--muted)}
+  button:disabled{opacity:.4;cursor:default}
+  a{color:var(--accent-2)}
+
+  .login{max-width:320px;margin:18vh auto 0;display:flex;flex-direction:column;gap:10px;text-align:center;padding:0 16px}
+  .login h1{font-family:var(--font-display);font-size:20px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;margin-bottom:6px}
+  .login .err{color:var(--danger);font-size:13px;min-height:18px}
+
+  .wrap{max-width:620px;margin:0 auto;display:none;padding:0 14px}
+  .wrap.open{display:block}
+
+  .topbar{position:sticky;top:0;z-index:20;background:var(--bg);border-bottom:2px solid var(--accent);padding:12px 14px 0;margin:0 -14px 16px}
+  .topbar h1{font-family:var(--font-display);font-size:17px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .topbar h1 small{font-family:inherit;font-size:11px;color:var(--muted);text-transform:none;letter-spacing:0;font-weight:400}
+  .tabs{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:10px}
+  .tabs::-webkit-scrollbar{display:none}
+  .tab{flex-shrink:0;padding:9px 13px;background:var(--surface);border:1px solid var(--surface-2);font-family:var(--font-display);font-size:12px;letter-spacing:.4px;text-transform:uppercase;color:var(--muted);cursor:pointer;white-space:nowrap}
+  .tab.active{background:var(--accent);border-color:var(--accent);color:var(--bg)}
+
+  .panel{display:none}
+  .panel.active{display:block}
+
+  .card{background:var(--surface);border:1px solid var(--surface-2);border-top:2px solid var(--accent);padding:16px;margin-bottom:14px}
+  .card h2{font-family:var(--font-display);font-size:14px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;margin-bottom:6px}
+  .card .hint{font-size:11.5px;color:var(--muted);line-height:1.5;margin-bottom:12px}
+  .field{margin-bottom:12px}
+  .field:last-child{margin-bottom:0}
+  .field label{display:block;font-size:11px;letter-spacing:.3px;text-transform:uppercase;color:var(--muted);margin-bottom:5px}
+  .field .sub{font-size:11px;color:var(--muted);margin-top:4px;line-height:1.4}
+  .row2{display:flex;gap:8px;flex-wrap:wrap}
+  .row2>.field{flex:1;min-width:130px}
+
+  .switch{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--surface-2)}
+  .switch:last-child{border-bottom:none}
+  .switch .lbl{font-size:13.5px}
+  .switch .lbl small{display:block;color:var(--muted);font-size:11px;margin-top:2px;line-height:1.4}
+  .switch-track{width:44px;height:26px;background:var(--surface-2);border:1px solid var(--muted);position:relative;cursor:pointer;flex-shrink:0;transition:background .15s}
+  .switch-track.on{background:var(--accent);border-color:var(--accent)}
+  .switch-thumb{width:18px;height:18px;background:var(--text);position:absolute;top:3px;left:3px;transition:transform .15s}
+  .switch-track.on .switch-thumb{transform:translateX(18px);background:var(--bg)}
+
+  .presets{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px}
+  .preset{border:2px solid var(--surface-2);padding:8px;cursor:pointer;text-align:center}
+  .preset.active{border-color:var(--accent)}
+  .preset .swatches{display:flex;height:26px;margin-bottom:6px}
+  .preset .swatches i{flex:1}
+  .preset span{font-size:10.5px;color:var(--muted);letter-spacing:.2px}
+
+  .tag-list{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+  .tag{display:flex;align-items:center;gap:6px;background:var(--surface-2);padding:7px 7px 7px 11px;font-size:12.5px}
+  .tag button{width:20px;height:20px;padding:0;background:transparent;color:var(--muted);font-size:15px;line-height:1}
+  .tag-input-row{display:flex;gap:6px;margin-top:8px}
+  .tag-input-row button{flex:0 0 46px;padding:0}
+
+  .rowitem{display:flex;gap:6px;margin-bottom:8px}
+  .rowitem input{flex:1}
+  .rowitem input.narrow{flex:0 0 100px}
+  .row-remove{width:42px;flex-shrink:0;background:var(--surface-2);color:var(--danger);display:flex;align-items:center;justify-content:center;padding:0}
+  .row-remove svg{width:15px;height:15px}
+
+  .upload-box{display:flex;align-items:center;gap:12px;background:var(--surface-2);padding:10px}
+  .upload-preview{width:54px;height:54px;background:var(--surface);display:flex;align-items:center;justify-content:center;color:var(--muted);overflow:hidden;flex-shrink:0}
+  .upload-preview img{width:100%;height:100%;object-fit:cover}
+  .upload-label{flex:1;font-size:12px;color:var(--muted);cursor:pointer}
+  .upload-label input{display:none}
+  .upload-label .btn-fake{display:inline-block;background:var(--surface);padding:9px 14px;font-size:12px;font-weight:600;color:var(--text)}
+
+  .photo-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px}
+  .photo-slot{position:relative;aspect-ratio:1;background:var(--surface-2);border:1px dashed var(--muted);display:flex;align-items:center;justify-content:center;color:var(--muted);overflow:hidden;cursor:pointer}
+  .photo-slot.filled{border-style:solid;border-color:var(--surface-2);cursor:default}
+  .photo-slot img{width:100%;height:100%;object-fit:cover}
+  .photo-slot input{display:none}
+  .photo-slot .photo-remove{position:absolute;top:3px;right:3px;width:22px;height:22px;background:rgba(0,0,0,.65);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px}
+  .photo-slot .photo-main-tag{position:absolute;bottom:0;left:0;right:0;background:var(--accent);color:var(--text);font-size:9px;font-weight:700;text-align:center;text-transform:uppercase;padding:2px 0}
+
+  .list{display:flex;flex-direction:column;gap:8px}
+  .list-title{font-family:var(--font-display);font-size:15px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;margin:20px 0 10px}
+  .row{display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--surface-2);padding:10px}
+  .row.hidden-prod{opacity:.5}
+  .row .thumb{width:46px;height:46px;background:var(--surface-2);display:flex;align-items:center;justify-content:center;color:var(--muted);overflow:hidden;flex-shrink:0}
+  .row .thumb img{width:100%;height:100%;object-fit:cover}
+  .row .info{flex:1;min-width:0}
+  .row .name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .row .meta{display:flex;align-items:center;gap:6px;margin-top:3px;flex-wrap:wrap}
+  .row .price{font-family:var(--font-display);font-size:12px;color:var(--accent-2);font-weight:600}
+  .row .category{font-size:11px;color:var(--muted);background:var(--surface-2);padding:2px 7px}
+  .row .actions{display:flex;gap:5px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;max-width:112px}
+  .row button.icon-toggle{padding:0;width:32px;height:32px;display:flex;align-items:center;justify-content:center;background:var(--surface-2)}
+  .row button.icon-toggle svg{width:14px;height:14px}
+  .row button.icon-toggle.on{background:var(--accent);color:var(--bg)}
+  .views-count{display:flex;align-items:center;gap:3px;font-size:11px;color:var(--muted)}
+  .views-count svg{width:12px;height:12px}
+
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:8px;margin-bottom:14px}
+  .stat{background:var(--surface);border:1px solid var(--surface-2);border-left:3px solid var(--accent);padding:11px}
+  .stat b{display:block;font-family:var(--font-display);font-size:19px;color:var(--accent-2)}
+  .stat span{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px}
+
+  .order{background:var(--surface);border:1px solid var(--surface-2);padding:12px;margin-bottom:8px}
+  .order .head{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:6px}
+  .order pre{white-space:pre-wrap;font-family:inherit;font-size:12.5px;line-height:1.5}
+
+  .empty{color:var(--muted);text-align:center;padding:26px 0;font-size:13px}
+  .savebar{position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:2px solid var(--accent);padding:11px 14px;display:none;z-index:30}
+  .savebar.show{display:block}
+  .savebar .inner{max-width:620px;margin:0 auto;display:flex;gap:10px;align-items:center}
+  .savebar button{flex:1}
+  .savebar .status{font-size:12px;color:var(--accent-2);flex:0 0 auto}
+  .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:80px;background:var(--surface-2);border:1px solid var(--accent);padding:11px 16px;font-size:13px;z-index:50;max-width:90%;text-align:center}
+</style>
+</head>
+<body>
+
+<div class="login" id="loginBox">
+  <h1>Вход в админку</h1>
+  <input type="password" id="tokenInput" placeholder="Админ-токен" autocomplete="current-password">
+  <button id="loginBtn">Войти</button>
+  <div class="err" id="loginErr"></div>
+</div>
+
+<div class="wrap" id="wrap">
+  <div class="topbar">
+    <h1><span id="shopTitle">Магазин</span> <small id="botStatus"></small></h1>
+    <div class="tabs" id="tabs"></div>
+  </div>
+
+  <div class="panel" id="panel-dashboard"></div>
+  <div class="panel" id="panel-brand"></div>
+  <div class="panel" id="panel-theme"></div>
+  <div class="panel" id="panel-catalog"></div>
+  <div class="panel" id="panel-commerce"></div>
+  <div class="panel" id="panel-checkout"></div>
+  <div class="panel" id="panel-notify"></div>
+  <div class="panel" id="panel-bot"></div>
+  <div class="panel" id="panel-channel"></div>
+  <div class="panel" id="panel-products"></div>
+  <div class="panel" id="panel-orders"></div>
+  <div class="panel" id="panel-advanced"></div>
+</div>
+
+<div class="savebar" id="savebar">
+  <div class="inner">
+    <span class="status" id="saveStatus"></span>
+    <button id="saveBtn">Сохранить настройки</button>
+  </div>
+</div>
+
+<script src="/shared.js"></script>
+<script>
+let TOKEN = '';
+let settings = null;
+let products = [];
+let views = {};
+let stats = {};
+let orders = [];
+let dirty = false;
+
+const $ = id => document.getElementById(id);
+
+// ---------- доступ к настройкам по пути 'theme.accent' ----------
+function getPath(obj, path){ return path.split('.').reduce((o,k)=> (o==null?o:o[k]), obj); }
+function setPath(obj, path, value){
+  const keys = path.split('.');
+  const last = keys.pop();
+  let cur = obj;
+  for(const k of keys){ if(typeof cur[k] !== 'object' || cur[k] === null) cur[k] = {}; cur = cur[k]; }
+  cur[last] = value;
+  markDirty();
+}
+function markDirty(){ dirty = true; $('savebar').classList.add('show'); $('saveStatus').textContent = ''; }
+
+// ---------- API ----------
+async function api(path, opts = {}){
+  const res = await fetch(path, {
+    ...opts,
+    headers: { 'Content-Type': 'application/json', 'x-admin-token': TOKEN, ...(opts.headers||{}) }
+  });
+  const data = await res.json().catch(()=>({}));
+  if(!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+  return data;
+}
+
+function toast(msg){
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(()=> el.remove(), 2600);
+}
+
+// ---------- конструктор полей ----------
+// Каждое поле описывается декларативно и само себя рисует и связывает с settings.
+// Добавить новую настройку = дописать одну строку в описание вкладки.
+const F = {
+  text: (path, label, opts={}) => ({ type:'text', path, label, ...opts }),
+  area: (path, label, opts={}) => ({ type:'area', path, label, ...opts }),
+  num:  (path, label, opts={}) => ({ type:'num', path, label, ...opts }),
+  range:(path, label, opts={}) => ({ type:'range', path, label, ...opts }),
+  color:(path, label, opts={}) => ({ type:'color', path, label, ...opts }),
+  sw:   (path, label, opts={}) => ({ type:'switch', path, label, ...opts }),
+  sel:  (path, label, options, opts={}) => ({ type:'select', path, label, options, ...opts }),
+  tags: (path, label, opts={}) => ({ type:'tags', path, label, ...opts }),
+  links:(path, label, opts={}) => ({ type:'links', path, label, ...opts }),
+  lines:(path, label, opts={}) => ({ type:'lines', path, label, ...opts }),
+};
+
+function renderField(f){
+  const v = getPath(settings, f.path);
+  const id = 'f_' + f.path.replace(/\./g, '_');
+  const sub = f.sub ? `<div class="sub">${f.sub}</div>` : '';
+
+  switch(f.type){
+    case 'switch':
+      return `<div class="switch"><div class="lbl">${f.label}${f.sub?`<small>${f.sub}</small>`:''}</div>
+        <div class="switch-track ${v?'on':''}" id="${id}" data-path="${f.path}" data-kind="switch"><div class="switch-thumb"></div></div></div>`;
+    case 'area':
+      return `<div class="field"><label>${f.label}</label>
+        <textarea id="${id}" data-path="${f.path}" data-kind="text" placeholder="${f.ph||''}">${esc(v||'')}</textarea>${sub}</div>`;
+    case 'num':
+      return `<div class="field"><label>${f.label}</label>
+        <input type="number" id="${id}" data-path="${f.path}" data-kind="num" value="${v ?? ''}" min="${f.min ?? 0}" max="${f.max ?? 999999}" placeholder="${f.ph||''}">${sub}</div>`;
+    case 'range':
+      return `<div class="field"><label>${f.label}: <b id="${id}_v">${v}</b>${f.unit||''}</label>
+        <input type="range" id="${id}" data-path="${f.path}" data-kind="range" value="${v}" min="${f.min}" max="${f.max}" step="${f.step||1}">${sub}</div>`;
+    case 'color': {
+      // если ручного значения нет — показываем то, что реально сейчас на экране
+      // (цвет из пресета), иначе поле врало бы чёрным на светлой теме
+      const key = f.path.split('.').pop();
+      const shown = /^#[0-9a-f]{6}$/i.test(v || '') ? v : (resolveTheme(settings.theme)[key] || f.fallback || '#000000');
+      return `<div class="field"><label>${f.label}</label>
+        <input type="color" id="${id}" data-path="${f.path}" data-kind="text" value="${shown}">${sub}</div>`;
+    }
+    case 'select':
+      return `<div class="field"><label>${f.label}</label>
+        <select id="${id}" data-path="${f.path}" data-kind="${f.numeric?'num':'text'}">
+          ${f.options.map(o=>`<option value="${esc(o[0])}" ${String(v)===String(o[0])?'selected':''}>${esc(o[1])}</option>`).join('')}
+        </select>${sub}</div>`;
+    case 'tags':
+      return `<div class="field"><label>${f.label}</label><div id="${id}" data-tags="${f.path}"></div>
+        <button type="button" class="secondary" data-addtag="${f.path}" data-target="${id}" style="width:100%;margin-top:8px">+ Добавить</button>${sub}</div>`;
+    case 'links':
+      return `<div class="field"><label>${f.label}</label><div id="${id}" data-links="${f.path}"></div>
+        <button type="button" class="secondary" data-addlink="${f.path}" data-target="${id}" style="width:100%;margin-top:6px">+ Добавить ссылку</button>${sub}</div>`;
+    case 'lines': // список простых строк (chat_id получателей)
+      return `<div class="field"><label>${f.label}</label><div id="${id}" data-lines="${f.path}"></div>
+        <button type="button" class="secondary" data-addline="${f.path}" data-target="${id}" style="width:100%;margin-top:6px">+ Добавить получателя</button>${sub}</div>`;
+    default:
+      return `<div class="field"><label>${f.label}</label>
+        <input type="text" id="${id}" data-path="${f.path}" data-kind="text" value="${esc(v||'')}" placeholder="${f.ph||''}" ${f.maxlength?`maxlength="${f.maxlength}"`:''}>${sub}</div>`;
+  }
+}
+
+function renderCard(c){
+  return `<div class="card">
+    <h2>${c.title}</h2>
+    ${c.hint ? `<div class="hint">${c.hint}</div>` : ''}
+    ${(c.fields||[]).map(renderField).join('')}
+    ${c.html || ''}
+  </div>`;
+}
+
+function renderPanel(panelId, cards){
+  $(panelId).innerHTML = cards.map(renderCard).join('');
+  bindPanel($(panelId));
+}
+
+// Одна общая привязка на панель — никаких индивидуальных onchange по всему файлу.
+function bindPanel(root){
+  root.querySelectorAll('[data-path]').forEach(el => {
+    const path = el.dataset.path, kind = el.dataset.kind;
+    if(kind === 'switch'){
+      el.onclick = () => { el.classList.toggle('on'); setPath(settings, path, el.classList.contains('on')); afterChange(path); };
+      return;
+    }
+    const handler = () => {
+      let val = el.value;
+      if(kind === 'num' || kind === 'range') val = val === '' ? null : Number(val);
+      setPath(settings, path, val);
+      if(kind === 'range'){ const b = document.getElementById(el.id + '_v'); if(b) b.textContent = val; }
+      afterChange(path);
+    };
+    el.oninput = handler;
+    if(el.tagName === 'SELECT') el.onchange = handler;
+  });
+  root.querySelectorAll('[data-tags]').forEach(box => renderTags(box, box.dataset.tags));
+  root.querySelectorAll('[data-links]').forEach(box => renderLinks(box, box.dataset.links));
+  root.querySelectorAll('[data-lines]').forEach(box => renderLines(box, box.dataset.lines));
+  root.querySelectorAll('[data-addtag]').forEach(btn => btn.onclick = () => addTagInline(btn.dataset.addtag, btn.dataset.target));
+  root.querySelectorAll('[data-addlink]').forEach(btn => btn.onclick = () => {
+    const arr = getPath(settings, btn.dataset.addlink) || [];
+    arr.push({ label:'', url:'' }); setPath(settings, btn.dataset.addlink, arr);
+    renderLinks($(btn.dataset.target), btn.dataset.addlink);
+  });
+  root.querySelectorAll('[data-addline]').forEach(btn => btn.onclick = () => {
+    const arr = getPath(settings, btn.dataset.addline) || [];
+    arr.push(''); setPath(settings, btn.dataset.addline, arr);
+    renderLines($(btn.dataset.target), btn.dataset.addline);
+  });
+}
+
+// смена темы должна сразу отражаться на самой админке — это и есть живое превью
+function afterChange(path){
+  if(path.startsWith('theme.')) applyTheme(settings.theme);
+  if(path === 'brand.shopName') $('shopTitle').textContent = settings.brand.shopName || 'Магазин';
+}
+
+function renderTags(box, path){
+  const arr = getPath(settings, path) || [];
+  box.innerHTML = `<div class="tag-list">${arr.map((t,i)=>`<div class="tag">${esc(t)}<button type="button" data-i="${i}">×</button></div>`).join('')}</div>`;
+  box.querySelectorAll('button').forEach(btn => btn.onclick = () => {
+    arr.splice(Number(btn.dataset.i),1); setPath(settings, path, arr); renderTags(box, path);
+  });
+}
+
+// вместо prompt(): во встроенных браузерах нативные диалоги часто блокируются молча
+function addTagInline(path, targetId){
+  const box = $(targetId);
+  if(box.querySelector('.tag-input-row')) return;
+  const row = document.createElement('div');
+  row.className = 'tag-input-row';
+  row.innerHTML = `<input type="text" placeholder="Введите значение"><button type="button">✓</button>`;
+  box.appendChild(row);
+  const input = row.querySelector('input');
+  input.focus();
+  const commit = () => {
+    const v = input.value.trim();
+    const arr = getPath(settings, path) || [];
+    if(v){ arr.push(v); setPath(settings, path, arr); }
+    renderTags(box, path);
+  };
+  row.querySelector('button').onclick = commit;
+  input.onkeydown = e => { if(e.key==='Enter') commit(); if(e.key==='Escape') renderTags(box, path); };
+}
+
+function renderLinks(box, path){
+  const arr = getPath(settings, path) || [];
+  box.innerHTML = arr.map((l,i)=>`
+    <div class="rowitem">
+      <input class="narrow" placeholder="Подпись" value="${esc(l.label||'')}" data-i="${i}" data-f="label">
+      <input placeholder="@username или https://..." value="${esc(l.url||'')}" data-i="${i}" data-f="url">
+      <button type="button" class="row-remove" data-rm="${i}">${TRASH_SVG}</button>
+    </div>`).join('');
+  box.querySelectorAll('input').forEach(inp => inp.oninput = () => {
+    arr[inp.dataset.i][inp.dataset.f] = inp.value; setPath(settings, path, arr);
+  });
+  box.querySelectorAll('[data-rm]').forEach(btn => btn.onclick = () => {
+    arr.splice(Number(btn.dataset.rm),1); setPath(settings, path, arr); renderLinks(box, path);
+  });
+}
+
+function renderLines(box, path){
+  const arr = getPath(settings, path) || [];
+  box.innerHTML = arr.map((v,i)=>`
+    <div class="rowitem">
+      <input placeholder="123456789 или @group" value="${esc(v)}" data-i="${i}">
+      <button type="button" class="row-remove" data-rm="${i}">${TRASH_SVG}</button>
+    </div>`).join('');
+  box.querySelectorAll('input').forEach(inp => inp.oninput = () => { arr[inp.dataset.i] = inp.value; setPath(settings, path, arr); });
+  box.querySelectorAll('[data-rm]').forEach(btn => btn.onclick = () => {
+    arr.splice(Number(btn.dataset.rm),1); setPath(settings, path, arr); renderLines(box, path);
+  });
+}
+
+/* ==================== ВКЛАДКИ ==================== */
+const TABS = [
+  ['dashboard','Обзор'], ['brand','Бренд'], ['theme','Тема'], ['catalog','Каталог'],
+  ['commerce','Продажи'], ['checkout','Форма заказа'], ['notify','Уведомления'],
+  ['bot','Бот'], ['channel','Канал'], ['products','Товары'], ['orders','Заказы'], ['advanced','Ещё'],
+];
+let activeTab = 'dashboard';
+
+function renderTabs(){
+  $('tabs').innerHTML = TABS.map(([id,label]) =>
+    `<div class="tab ${id===activeTab?'active':''}" data-tab="${id}">${label}</div>`).join('');
+  $('tabs').querySelectorAll('.tab').forEach(el => el.onclick = () => selectTab(el.dataset.tab));
+}
+function selectTab(id){
+  activeTab = id;
+  renderTabs();
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  $('panel-' + id).classList.add('active');
+  window.scrollTo(0,0);
+  buildPanel(id);
+}
+
+function buildPanel(id){
+  if(id === 'dashboard') return buildDashboard();
+  if(id === 'products')  return buildProducts();
+  if(id === 'orders')    return buildOrders();
+  if(id === 'brand'){
+    renderPanel('panel-brand', PANEL_BRAND());
+    const preview = $('logoPreview');
+    preview.innerHTML = settings.brand.logoImage
+      ? `<img src="/api/image?id=${encodeURIComponent(settings.brand.logoImage)}">` : PLACEHOLDER_SVG;
+    $('logoInput').onchange = onLogoSelected;
+    return;
+  }
+  if(id === 'theme')     return buildTheme();
+  if(id === 'catalog')   return renderPanel('panel-catalog', PANEL_CATALOG());
+  if(id === 'commerce')  return renderPanel('panel-commerce', PANEL_COMMERCE());
+  if(id === 'checkout')  return renderPanel('panel-checkout', PANEL_CHECKOUT());
+  if(id === 'notify')    return buildNotify();
+  if(id === 'bot')       return renderPanel('panel-bot', PANEL_BOT());
+  if(id === 'channel')   return renderPanel('panel-channel', PANEL_CHANNEL());
+  if(id === 'advanced')  return buildAdvanced();
+}
+
+// ---------- Бренд ----------
+const PANEL_BRAND = () => ([
+  { title:'Название и иконка', fields:[
+    F.text('brand.shopName','Название магазина', { ph:'MY SHOP' }),
+    F.text('brand.shopIcon','Иконка (эмодзи)', { ph:'🛒', maxlength:4, sub:'Показывается слева от названия, если не загружен логотип' }),
+    F.text('brand.tagline','Подзаголовок', { ph:'ручная работа с 2014 года' }),
+    F.sw('brand.showTagline','Показывать подзаголовок'),
+    F.sel('brand.headerStyle','Стиль шапки', [['bar','Полоса с акцентом'],['minimal','Минимал'],['banner','Баннер']]),
+  ], html:`
+    <div class="field" style="margin-top:12px">
+      <label>Логотип (заменяет эмодзи)</label>
+      <div class="upload-box">
+        <div class="upload-preview" id="logoPreview"></div>
+        <label class="upload-label"><input type="file" accept="image/*" id="logoInput"><span class="btn-fake">Загрузить лого</span></label>
+      </div>
+      <div class="sub">Квадратная картинка, ~200×200. Хранится на вашем сервере.</div>
+    </div>`},
+  { title:'О магазине', hint:'Текст показывается в профиле покупателя.', fields:[
+    F.area('profile.aboutText','Описание', { ph:'Пара слов о вас' }),
+    F.links('profile.socialLinks','Ссылки в профиле', { sub:'Avito, ВК, канал, сайт — что угодно. Пустая ссылка не показывается.' }),
+    F.sw('profile.showFavorites','Пункт «Избранное» в профиле'),
+  ]},
+]);
+
+// ---------- Тема ----------
+function buildTheme(){
+  const presetCards = Object.entries(THEME_PRESETS).map(([key,p]) => `
+    <div class="preset ${settings.theme.preset===key?'active':''}" data-preset="${key}">
+      <div class="swatches"><i style="background:${p.bg}"></i><i style="background:${p.surface2}"></i><i style="background:${p.accent}"></i><i style="background:${p.accent2}"></i></div>
+      <span>${p.label}</span>
+    </div>`).join('');
+
+  $('panel-theme').innerHTML = `
+    <div class="card">
+      <h2>Пресет оформления</h2>
+      <div class="hint">Пресет задаёт палитру, шрифт, рамки и скругления разом. Дальше можно подкрутить любой параметр вручную.</div>
+      <div class="presets" id="presetGrid">${presetCards}</div>
+    </div>
+    ${renderCard({ title:'Цвета', hint:'Пустое поле = берётся из пресета. Меняется прямо здесь — админка перекрашивается сразу.', fields:[
+      F.color('theme.bg','Фон', { fallback:'#0d0d0d' }),
+      F.color('theme.surface','Поверхность', { fallback:'#161616' }),
+      F.color('theme.surface2','Поверхность 2', { fallback:'#202020' }),
+      F.color('theme.text','Текст', { fallback:'#f2efe6' }),
+      F.color('theme.muted','Приглушённый текст', { fallback:'#8a8880' }),
+      F.color('theme.accent','Акцент', { fallback:'#e8341c' }),
+      F.color('theme.accent2','Акцент 2 (цены)', { fallback:'#f2c94c' }),
+      F.sel('theme.colorScheme','Источник цветов', [['dark','Своя тёмная'],['light','Своя светлая'],['telegram','Подстроиться под тему Telegram']],
+        { sub:'«Подстроиться» — мини-апп возьмёт цвета клиента пользователя. Свои цвета при этом игнорируются.' }),
+    ]})}
+    ${renderCard({ title:'Типографика и форма', fields:[
+      F.sel('theme.fontDisplay','Акцидентный шрифт', Object.keys(FONT_STACKS).map(k=>[k,k])),
+      F.range('theme.fontScale','Масштаб текста', { min:80, max:130, unit:'%' }),
+      F.range('theme.radius','Скругление углов', { min:0, max:40, unit:'px' }),
+      F.range('theme.borderWidth','Толщина рамок', { min:0, max:6, unit:'px' }),
+      F.sw('theme.uppercase','КАПСЛОК в заголовках'),
+      F.sel('theme.density','Плотность вёрстки', [['compact','Плотно'],['normal','Обычно'],['roomy','Просторно']]),
+    ]})}
+    ${renderCard({ title:'Сетка и карточки', fields:[
+      F.sel('theme.gridColumns','Колонок на телефоне', [[1,'1 — крупные карточки'],[2,'2 — как обычно']], { numeric:true }),
+      F.sel('theme.cardStyle','Стиль карточки', [['bordered','С рамкой'],['flat','Без рамки'],['shadow','Жёсткая тень'],['sticker','Наклейки (с наклоном)']]),
+      F.sel('theme.imageRatio','Пропорции фото', [['landscape','4:3 — горизонтальные'],['square','1:1 — квадрат'],['portrait','3:4 — вертикальные']]),
+    ]})}
+    ${renderCard({ title:'Авангард', hint:'Приёмы, которые делают витрину непохожей на шаблон.', fields:[
+      F.sw('theme.diagonal','Косые срезы у шторок и бейджей'),
+      F.sw('theme.grain','Зерно плёнки поверх фона'),
+      F.sw('theme.marquee','Бегущая строка под шапкой'),
+      F.text('theme.marqueeText','Текст бегущей строки', { ph:'Доставка по всей России · Новая коллекция' }),
+      F.sel('theme.animations','Анимации', [['full','Полные'],['reduced','Сдержанные'],['off','Выключить']]),
+    ]})}
+    ${renderCard({ title:'Свой CSS', hint:'Для тонкой доводки. Вставляется в конец стилей витрины — можно переопределить что угодно.', fields:[
+      F.area('theme.customCss','CSS', { ph:'.card-name{letter-spacing:1px}' }),
+    ]})}
+  `;
+  bindPanel($('panel-theme'));
+  $('presetGrid').querySelectorAll('.preset').forEach(el => el.onclick = () => {
+    // пресет сбрасывает ручные переопределения — иначе «сменил пресет, ничего не изменилось»
+    const p = THEME_PRESETS[el.dataset.preset];
+    Object.assign(settings.theme, {
+      preset: el.dataset.preset,
+      bg:'', surface:'', surface2:'', text:'', muted:'', accent:'', accent2:'',
+      radius: p.radius, borderWidth: p.borderWidth, fontDisplay: p.fontDisplay, uppercase: p.uppercase,
+    });
+    markDirty();
+    applyTheme(settings.theme);
+    buildTheme();
+  });
+}
+
+// ---------- Каталог ----------
+const PANEL_CATALOG = () => ([
+  { title:'Что показывать', fields:[
+    F.sw('catalog.showSearch','Поиск'),
+    F.sw('catalog.showCategories','Категории'),
+    F.sw('catalog.showSort','Сортировка'),
+    F.sw('catalog.showCount','Счётчик товаров'),
+    F.sel('catalog.defaultSort','Сортировка по умолчанию', [['default','Как в админке'],['price-asc','Сначала дешёвые'],['price-desc','Сначала дорогие'],['name','По названию']]),
+  ]},
+  { title:'Остатки', fields:[
+    F.sw('catalog.showStock','Показывать наличие', { sub:'Плашки «Раскуплено» и «Осталось N»' }),
+    F.num('catalog.lowStockThreshold','Порог «осталось мало»', { min:0, max:99 }),
+    F.sw('catalog.hideSoldOut','Прятать раскупленные из каталога'),
+  ]},
+  { title:'Бейджи и пустой каталог', fields:[
+    F.sw('catalog.showFeaturedBadge','Бейдж у хитов'),
+    F.text('catalog.featuredLabel','Текст бейджа', { ph:'TOP' }),
+    F.area('catalog.emptyText','Текст пустого каталога'),
+  ]},
+]);
+
+// ---------- Продажи ----------
+const PANEL_COMMERCE = () => ([
+  { title:'Режим продаж', hint:
+      '<b>Корзина</b> — классический магазин с оформлением заказа.<br>'+
+      '<b>Только через менеджера</b> — корзины и формы нет вообще, кнопка ведёт в чат с продавцом.<br>'+
+      '<b>Заявка</b> — без корзины, но с формой: клиент оставляет контакты по одному товару.<br>'+
+      '<b>Витрина</b> — каталог без покупки, чистый showcase.',
+    fields:[
+      F.sel('commerce.mode','Режим', [['cart','Корзина + оформление'],['manager','Только через менеджера'],['inquiry','Заявка по товару'],['catalog','Витрина без покупки']]),
+      F.text('commerce.ctaProduct','Текст кнопки в карточке', { ph:'по умолчанию — по режиму' }),
+      F.text('commerce.ctaCart','Текст кнопки оформления', { ph:'Оформить заказ' }),
+    ]},
+  { title:'Контакт менеджера', hint:'Куда ведут кнопки «Написать менеджеру». Можно писать просто @username.', fields:[
+    F.text('manager.buyUrl','Ссылка на менеджера', { ph:'@username или https://t.me/username' }),
+    F.text('manager.supportUrl','Ссылка на поддержку', { ph:'@support' }),
+    F.area('manager.templateProduct','Шаблон сообщения по товару', { sub:'Переменные: {product}, {price}, {shop}, {name}' }),
+    F.area('manager.templateCart','Шаблон сообщения по корзине', { sub:'Переменные: {items}, {total}, {shop}, {name}' }),
+    F.sw('manager.autoCopy','Копировать текст в буфер перед переходом', { sub:'Мобильные клиенты Telegram часто игнорируют ?text= — копия спасает' }),
+  ]},
+  { title:'Деньги и функции', fields:[
+    F.text('commerce.currency','Символ валюты', { ph:'₽' }),
+    F.sel('commerce.currencyPosition','Где символ', [['after','После суммы — 1 000 ₽'],['before','Перед суммой — $1 000']]),
+    F.sw('commerce.priceHidden','Скрыть цены'),
+    F.text('commerce.priceHiddenText','Текст вместо цены', { ph:'Цена по запросу' }),
+    F.num('commerce.minOrder','Минимальная сумма заказа', { min:0, sub:'0 — без ограничения' }),
+    F.sw('commerce.enableCart','Корзина включена'),
+    F.sw('commerce.enableFavorites','Избранное включено'),
+  ]},
+]);
+
+// ---------- Форма заказа ----------
+const PANEL_CHECKOUT = () => ([
+  { title:'Какие поля спрашивать', fields:[
+    F.sw('checkout.askName','Имя'),
+    F.sw('checkout.askPhone','Телефон'),
+    F.sw('checkout.phoneRequired','Телефон обязателен'),
+    F.sw('checkout.askContact','Ссылка на покупателя'),
+    F.sw('checkout.askEmail','Email'),
+    F.sw('checkout.askComment','Комментарий к заказу'),
+    F.sw('checkout.askAddress','Адрес доставки', { sub:'Показывается, только если заданы способы доставки' }),
+  ]},
+  { title:'Оплата и доставка', hint:'Если оба списка пустые — эти поля не показываются, оформление проще.', fields:[
+    F.tags('checkout.paymentMethods','Способы оплаты'),
+    F.tags('checkout.deliveryMethods','Способы доставки'),
+  ]},
+  { title:'Согласие и финальный экран', fields:[
+    F.sw('checkout.requireAgreement','Требовать согласие на обработку данных'),
+    F.text('checkout.agreementText','Текст согласия'),
+    F.text('checkout.successTitle','Заголовок после заказа'),
+    F.area('checkout.successText','Текст после заказа'),
+  ]},
+]);
+
+// ---------- Уведомления ----------
+function buildNotify(){
+  $('panel-notify').innerHTML = `
+    ${renderCard({ title:'Отстук менеджеру', hint:
+      '⚠️ Обязательно: получатель должен сам написать боту хотя бы <code>/start</code>. '+
+      'Telegram запрещает боту писать первым — иначе уведомления молча не придут.<br>'+
+      'Не знаете свой ID — отправьте боту команду <code>/id</code>, он ответит числом.',
+      fields:[
+        F.sw('notify.enabled','Уведомления включены'),
+        F.lines('notify.chatIds','Получатели', { sub:'Числовой chat_id или @username группы. Можно несколько — придёт всем.' }),
+        F.sw('notify.onOrder','При новом заказе'),
+        F.sw('notify.onInquiry','Когда клиент пишет менеджеру из мини-аппа'),
+        F.sw('notify.onNewUser','Когда новый человек запускает бота'),
+        F.sw('notify.includeCustomerLink','Прикладывать ссылку на профиль клиента'),
+        F.sw('notify.silent','Без звука'),
+      ]})}
+    <div class="card">
+      <h2>Проверка</h2>
+      <div class="hint">Отправит тестовое сообщение всем получателям из списка выше. Сначала сохраните настройки.</div>
+      <button type="button" class="secondary" id="testNotifBtn" style="width:100%">Отправить тестовое уведомление</button>
+      <div id="testNotifResult" style="font-size:12.5px;margin-top:8px;line-height:1.5"></div>
+    </div>`;
+  bindPanel($('panel-notify'));
+  $('testNotifBtn').onclick = testNotification;
+}
+
+async function testNotification(){
+  const out = $('testNotifResult');
+  if(dirty) await saveSettings();
+  out.style.color = 'var(--muted)';
+  out.textContent = 'Отправляю…';
+  try{
+    const r = await api('/api/admin/test-notification', { method:'POST' });
+    out.style.color = 'var(--accent-2)';
+    out.textContent = `✓ Отправлено получателям: ${r.sent}`;
+  }catch(e){
+    out.style.color = 'var(--danger)';
+    out.textContent = '✗ ' + e.message;
+  }
+}
+
+// ---------- Бот ----------
+const PANEL_BOT = () => ([
+  { title:'Поведение бота', hint:'Бот работает на вашем сервере через long polling — вебхук и домен для него не нужны. Токен задаётся в файле <code>.env</code>.',
+    fields:[
+      F.sw('bot.enabled','Бот отвечает'),
+      F.area('bot.welcomeText','Приветствие /start', { sub:'Переменные: {name}, {shop}' }),
+      F.text('bot.buttonText','Текст кнопки-ссылки', { ph:'🛍 Открыть магазин' }),
+      F.area('bot.helpText','Ответ на /help и /support'),
+    ]},
+  { title:'Чек покупателю', fields:[
+    F.sw('bot.notifyCustomer','Присылать копию заказа покупателю в чат'),
+    F.area('bot.customerReceiptText','Текст чека', { sub:'Переменные: {order}, {name}' }),
+  ]},
+]);
+
+// ---------- Канал ----------
+const PANEL_CHANNEL = () => ([
+  { title:'Публикация товаров в канал',
+    hint:'Заполните оба поля — у каждого товара появится кнопка «Опубликовать»: пост с фото и ценой уйдёт в канал, а кнопка в посте откроет мини-апп сразу на этом товаре. Бот должен быть админом канала с правом публикации.',
+    fields:[
+      F.text('channel.channelId','Канал', { ph:'@mychannel' }),
+      F.text('channel.miniAppLink','Ссылка мини-аппа', { ph:'https://t.me/yourbot/yourapp', sub:'Та же, что указывали в BotFather' }),
+      F.area('channel.postTemplate','Шаблон поста', { sub:'Переменные: {name}, {description}, {price}, {category}, {shop}' }),
+      F.text('channel.postButtonText','Текст кнопки в посте'),
+    ]},
+]);
+
+// ---------- Ещё ----------
+function buildAdvanced(){
+  $('panel-advanced').innerHTML = `
+    ${renderCard({ title:'Режим обслуживания', hint:'Витрина закрывается для всех, каталог не показывается. Админка продолжает работать.', fields:[
+      F.sw('advanced.maintenanceMode','Закрыть магазин'),
+      F.area('advanced.maintenanceText','Что написать посетителям'),
+    ]})}
+    ${renderCard({ title:'Регион', fields:[
+      F.text('advanced.locale','Локаль формата чисел и дат', { ph:'ru-RU' }),
+      F.text('advanced.timezone','Часовой пояс', { ph:'Europe/Moscow', sub:'В этом поясе проставляется время в уведомлениях о заказах' }),
+    ]})}
+    <div class="card">
+      <h2>Перенос и бэкап</h2>
+      <div class="hint">Экспорт сохраняет настройки и товары в JSON. Импорт разворачивает их на другом сервере — удобно поднимать однотипные магазины.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button type="button" class="secondary" id="exportBtn" style="flex:1">Экспорт</button>
+        <label class="upload-label" style="flex:1"><input type="file" accept="application/json" id="importInput"><span class="btn-fake" style="display:block;text-align:center;padding:11px">Импорт</span></label>
+      </div>
+    </div>`;
+  bindPanel($('panel-advanced'));
+  $('exportBtn').onclick = async () => {
+    const data = await api('/api/admin/export');
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type:'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `shop-backup-${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+  };
+  $('importInput').onchange = async e => {
+    const file = e.target.files[0];
+    if(!file) return;
+    if(!confirm('Импорт заменит текущие настройки и список товаров. Продолжить?')) return;
+    try{
+      await api('/api/admin/import', { method:'POST', body: await file.text() });
+      toast('Импортировано');
+      await init();
+    }catch(err){ alert('Не удалось импортировать: ' + err.message); }
+  };
+}
+
+// ---------- Обзор ----------
+function buildDashboard(){
+  $('panel-dashboard').innerHTML = `
+    <div class="stats">
+      <div class="stat"><b>${stats.products ?? '—'}</b><span>Товаров</span></div>
+      <div class="stat"><b>${stats.orders ?? '—'}</b><span>Заказов</span></div>
+      <div class="stat"><b>${stats.revenue != null ? fmt(stats.revenue) : '—'}</b><span>Сумма</span></div>
+      <div class="stat"><b>${stats.views ?? '—'}</b><span>Просмотров</span></div>
+      <div class="stat"><b>${stats.users ?? '—'}</b><span>В боте</span></div>
+    </div>
+    <div class="card">
+      <h2>Быстрый старт</h2>
+      <div class="hint">
+        1. <b>Бренд</b> — название, лого, описание.<br>
+        2. <b>Тема</b> — пресет оформления, потом цвета под себя.<br>
+        3. <b>Продажи</b> — режим (корзина / только менеджер / заявка / витрина) и контакт менеджера.<br>
+        4. <b>Уведомления</b> — куда присылать заказы, и обязательно нажать «Тестовое уведомление».<br>
+        5. <b>Товары</b> — добавить каталог.
+      </div>
+      ${!stats.botConnected ? `<div class="hint" style="color:var(--danger)">⚠️ BOT_TOKEN не задан в .env — бот, аватарки и уведомления работать не будут.</div>` : ''}
+      ${!settings.notify.chatIds.length ? `<div class="hint" style="color:var(--accent-2)">⚠️ Не указан ни один получатель уведомлений — заказы будут копиться только в разделе «Заказы».</div>` : ''}
+      ${!settings.manager.buyUrl && settings.commerce.mode==='manager' ? `<div class="hint" style="color:var(--danger)">⚠️ Режим «только через менеджера» включён, но ссылка на менеджера пустая — кнопка покупки не сработает.</div>` : ''}
+    </div>`;
+}
+
+// ---------- Заказы ----------
+async function buildOrders(){
+  $('panel-orders').innerHTML = '<div class="empty">Загружаю…</div>';
+  try{ orders = await api('/api/admin/orders'); }catch(e){ orders = []; }
+  $('panel-orders').innerHTML = orders.length ? `
+    <div class="list-title">Последние заказы</div>
+    ${orders.map(o => `
+      <div class="order">
+        <div class="head">
+          <span>#${o.id}</span>
+          <span>${new Date(o.at).toLocaleString(settings.advanced.locale)}</span>
+        </div>
+        <pre>${esc(o.items.map(i=>`${i.name} × ${i.qty} — ${fmt(i.price*i.qty)}`).join('\n'))}
+Итого: ${fmt(o.total)}
+${o.customer.name || ''}${o.customer.phone ? ' · '+o.customer.phone : ''}${o.user && o.user.username ? ' · @'+o.user.username : ''}${o.customer.address ? '\n'+o.customer.address : ''}</pre>
+      </div>`).join('')}
+    <button type="button" class="ghost" id="clearOrders" style="width:100%;margin-top:10px">Очистить историю</button>
+  ` : '<div class="empty">Заказов пока нет</div>';
+  const btn = $('clearOrders');
+  if(btn) btn.onclick = async () => {
+    if(!confirm('Удалить всю историю заказов?')) return;
+    await api('/api/admin/orders', { method:'DELETE' });
+    buildOrders();
+  };
+}
+
+/* ==================== ТОВАРЫ ==================== */
+let pendingImages = [];
+let pendingThumbs = [];
+let editingId = null;
+
+function buildProducts(){
+  $('panel-products').innerHTML = `
+    <div class="card">
+      <h2 id="prodFormTitle">Добавить товар</h2>
+      <label style="display:block;font-size:11px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Фото (до 8, первое — главное)</label>
+      <div class="photo-grid" id="photoGrid"></div>
+      <div class="row2">
+        <div class="field"><label>Название</label><input id="pName" placeholder="Название товара"></div>
+        <div class="field"><label>Категория</label><input id="pCategory" placeholder="Например: Обувь" list="categoryList"><datalist id="categoryList"></datalist></div>
+      </div>
+      <div class="field"><label>Описание</label><textarea id="pDesc" placeholder="Описание товара"></textarea></div>
+      <div class="row2">
+        <div class="field"><label>Цена</label><input id="pPrice" type="number" inputmode="decimal" placeholder="0"></div>
+        <div class="field"><label>Старая цена</label><input id="pOldPrice" type="number" inputmode="decimal" placeholder="—"></div>
+        <div class="field"><label>Остаток</label><input id="pStock" type="number" min="0" placeholder="не ограничено"></div>
+      </div>
+      <div class="field"><label>Свой бейдж (вместо TOP)</label><input id="pBadge" placeholder="NEW / SALE / HIT" maxlength="16"></div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button id="saveProductBtn" style="flex:1">Добавить товар</button>
+        <button id="cancelEditBtn" class="ghost" style="display:none">Отмена</button>
+      </div>
+    </div>
+    <div class="list-title">Каталог (${products.length})</div>
+    <div class="list" id="list"></div>`;
+
+  $('photoGrid') && renderPhotoGrid();
+  updateCategoryList();
+  renderList();
+  $('saveProductBtn').onclick = saveProduct;
+  $('cancelEditBtn').onclick = resetProductForm;
+}
+
+function renderPhotoGrid(){
+  const grid = $('photoGrid');
+  const slots = [];
+  for(let i = 0; i < 8; i++){
+    const imgId = pendingImages[i];
+    const thumbId = pendingThumbs[i] || imgId;
+    if(imgId){
+      slots.push(`<div class="photo-slot filled"><img src="/api/image?id=${encodeURIComponent(thumbId)}">
+        ${i === 0 ? '<span class="photo-main-tag">Главное</span>' : ''}
+        <button type="button" class="photo-remove" data-remove="${i}">×</button></div>`);
+    } else if(i === pendingImages.length){
+      slots.push(`<label class="photo-slot">${PLACEHOLDER_SVG}<input type="file" accept="image/*" data-upload="${i}"></label>`);
+    } else {
+      slots.push(`<div class="photo-slot" style="opacity:.3;cursor:default">${PLACEHOLDER_SVG}</div>`);
+    }
+  }
+  grid.innerHTML = slots.join('');
+  grid.querySelectorAll('[data-upload]').forEach(input => {
+    input.onchange = e => onPhotoSelected(e, Number(input.dataset.upload));
+  });
+  grid.querySelectorAll('[data-remove]').forEach(btn => {
+    btn.onclick = e => {
+      e.preventDefault();
+      const i = Number(btn.dataset.remove);
+      pendingImages.splice(i, 1); pendingThumbs.splice(i, 1);
+      renderPhotoGrid();
+    };
+  });
+}
+
+function loadImageEl(file){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = () => { const img = new Image(); img.onerror = reject; img.onload = () => resolve(img); img.src = reader.result; };
+    reader.readAsDataURL(file);
+  });
+}
+function resizeToDataUrl(img, maxW, quality){
+  const scale = Math.min(1, maxW / img.width);
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(img.width * scale);
+  canvas.height = Math.round(img.height * scale);
+  canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+  // WebP при том же качестве весит на 25-35% меньше JPEG — на глаз разницы нет
+  return canvas.toDataURL('image/webp', quality);
+}
+// две версии из одного файла: миниатюра для сетки, полная — для карусели
+async function resizeImage(file){
+  const img = await loadImageEl(file);
+  return { full: resizeToDataUrl(img, 1200, 0.82), thumb: resizeToDataUrl(img, 400, 0.75) };
+}
+
+async function onPhotoSelected(e, slotIndex){
+  const file = e.target.files[0];
+  if(!file) return;
+  try{
+    const { full, thumb } = await resizeImage(file);
+    const [fullRes, thumbRes] = await Promise.all([
+      api('/api/admin/upload', { method:'POST', body: JSON.stringify({ dataUrl: full }) }),
+      api('/api/admin/upload', { method:'POST', body: JSON.stringify({ dataUrl: thumb }) }),
+    ]);
+    pendingImages[slotIndex] = fullRes.id;
+    pendingThumbs[slotIndex] = thumbRes.id;
+  }catch(err){ alert('Не удалось загрузить фото: ' + err.message); }
+  renderPhotoGrid();
+}
+
+async function saveProduct(){
+  const val = id => $(id).value.trim();
+  const name = val('pName');
+  const price = Number(val('pPrice'));
+  if(!name) return alert('Укажите название');
+  if(!price && !settings.commerce.priceHidden) return alert('Укажите цену');
+
+  const payload = {
+    name, price,
+    category: val('pCategory'),
+    description: val('pDesc'),
+    oldPrice: val('pOldPrice') === '' ? null : Number(val('pOldPrice')),
+    stock: val('pStock') === '' ? null : Math.max(0, Number(val('pStock')) || 0),
+    badge: val('pBadge'),
+    images: pendingImages, thumbs: pendingThumbs,
+  };
+
+  try{
+    if(editingId){
+      const updated = await api('/api/admin/products', { method:'PUT', body: JSON.stringify({ ...payload, id: editingId }) });
+      products = products.map(p => p.id === editingId ? updated : p);
+      toast('Товар обновлён');
+    } else {
+      products.push(await api('/api/admin/products', { method:'POST', body: JSON.stringify(payload) }));
+      toast('Товар добавлен');
+    }
+  }catch(e){ return alert('Ошибка: ' + e.message); }
+
+  resetProductForm();
+  updateCategoryList();
+  renderList();
+}
+
+function resetProductForm(){
+  editingId = null;
+  ['pName','pCategory','pDesc','pPrice','pOldPrice','pStock','pBadge'].forEach(id => { if($(id)) $(id).value = ''; });
+  pendingImages = []; pendingThumbs = [];
+  renderPhotoGrid();
+  $('prodFormTitle').textContent = 'Добавить товар';
+  $('saveProductBtn').textContent = 'Добавить товар';
+  $('cancelEditBtn').style.display = 'none';
+}
+
+function editProduct(id){
+  const p = products.find(x => x.id === id);
+  if(!p) return;
+  editingId = id;
+  $('pName').value = p.name || '';
+  $('pCategory').value = p.category || '';
+  $('pDesc').value = p.description || '';
+  $('pPrice').value = p.price ?? '';
+  $('pOldPrice').value = p.oldPrice ?? '';
+  $('pStock').value = typeof p.stock === 'number' ? p.stock : '';
+  $('pBadge').value = p.badge || '';
+  pendingImages = [...(p.images || [])];
+  pendingThumbs = [...(p.thumbs || [])];
+  renderPhotoGrid();
+  $('prodFormTitle').textContent = 'Редактирование: ' + p.name;
+  $('saveProductBtn').textContent = 'Сохранить изменения';
+  $('cancelEditBtn').style.display = '';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function updateCategoryList(){
+  const cats = [...new Set(products.map(p => p.category).filter(Boolean))];
+  const dl = $('categoryList');
+  if(dl) dl.innerHTML = cats.map(c => `<option value="${esc(c)}">`).join('');
+}
+
+function renderList(){
+  const list = $('list');
+  if(!list) return;
+  if(!products.length){ list.innerHTML = '<div class="empty">Товаров пока нет</div>'; return; }
+  list.innerHTML = products.map((p, i) => `
+    <div class="row ${p.hidden ? 'hidden-prod' : ''}">
+      <div class="thumb">${(p.thumbs && p.thumbs[0]) || (p.images && p.images[0])
+        ? `<img src="/api/image?id=${encodeURIComponent((p.thumbs && p.thumbs[0]) || p.images[0])}">` : PLACEHOLDER_SVG}</div>
+      <div class="info">
+        <div class="name">${esc(p.name)}</div>
+        <div class="meta">
+          <span class="price">${fmt(p.price)}</span>
+          ${p.category ? `<span class="category">${esc(p.category)}</span>` : ''}
+          <span class="category" data-act="stock" data-id="${p.id}" style="cursor:pointer">
+            ${p.stock === 0 ? 'Раскуплено' : typeof p.stock === 'number' ? `Остаток: ${p.stock}` : 'Не ограничено'}
+          </span>
+          ${views[p.id] ? `<span class="views-count">${EYE_SVG}${views[p.id]}</span>` : ''}
+        </div>
+      </div>
+      <div class="actions">
+        <button class="icon-toggle" data-id="${p.id}" data-act="up" title="Выше" ${i===0?'disabled':''}>↑</button>
+        <button class="icon-toggle ${p.featured ? 'on' : ''}" data-id="${p.id}" data-act="star" title="Хит">${STAR_SVG}</button>
+        <button class="icon-toggle" data-id="${p.id}" data-act="edit" title="Изменить">${EDIT_SVG}</button>
+        <button class="icon-toggle ${p.hidden ? 'on' : ''}" data-id="${p.id}" data-act="hide" title="Скрыть с витрины">${EYE_OFF_SVG}</button>
+        <button class="icon-toggle" data-id="${p.id}" data-act="publish" title="В канал" style="color:var(--accent-2)">${SEND_SVG}</button>
+        <button class="icon-toggle" data-id="${p.id}" data-act="delete" title="Удалить" style="color:var(--danger)">${TRASH_SVG}</button>
+      </div>
+    </div>`).join('');
+
+  const on = (act, fn) => list.querySelectorAll(`[data-act=${act}]`).forEach(el => el.onclick = () => fn(Number(el.dataset.id), el));
+  on('stock', editStock);
+  on('star',  id => patchProduct(id, { featured: !products.find(p=>p.id===id).featured }));
+  on('hide',  id => patchProduct(id, { hidden: !products.find(p=>p.id===id).hidden }));
+  on('edit',  editProduct);
+  on('publish', publishProduct);
+  on('delete', removeProduct);
+  on('up', moveUp);
+}
+
+async function moveUp(id){
+  const i = products.findIndex(p => p.id === id);
+  if(i <= 0) return;
+  [products[i-1], products[i]] = [products[i], products[i-1]];
+  renderList();
+  await api('/api/admin/reorder', { method:'POST', body: JSON.stringify({ ids: products.map(p=>p.id) }) });
+}
+
+async function patchProduct(id, patch){
+  const p = products.find(x => x.id === id);
+  Object.assign(p, patch);
+  renderList();
+  try{ await api('/api/admin/products', { method:'PUT', body: JSON.stringify({ id, ...patch }) }); }
+  catch(e){ alert('Не сохранилось: ' + e.message); }
+}
+
+async function publishProduct(id, btn){
+  btn.disabled = true;
+  const original = btn.innerHTML;
+  btn.innerHTML = '…';
+  try{
+    await api('/api/admin/publish', { method:'POST', body: JSON.stringify({ productId: id }) });
+    btn.innerHTML = '✓';
+    setTimeout(() => { btn.innerHTML = original; btn.disabled = false; }, 1400);
+    return;
+  }catch(e){ alert('Не удалось опубликовать: ' + e.message); }
+  btn.innerHTML = original;
+  btn.disabled = false;
+}
+
+function editStock(id){
+  const el = document.querySelector(`[data-act="stock"][data-id="${id}"]`);
+  if(!el || el.querySelector('input')) return;
+  const p = products.find(x => x.id === id);
+  el.innerHTML = `<input type="number" min="0" value="${typeof p.stock === 'number' ? p.stock : ''}" placeholder="—" style="width:64px;padding:2px 5px">`;
+  const input = el.querySelector('input');
+  input.focus();
+  input.onclick = e => e.stopPropagation();
+  const commit = async () => {
+    const stock = input.value.trim() === '' ? null : Math.max(0, Number(input.value) || 0);
+    await patchProduct(id, { stock });
+  };
+  input.onblur = commit;
+  input.onkeydown = e => { if(e.key === 'Enter') input.blur(); };
+}
+
+async function removeProduct(id){
+  if(!confirm('Удалить товар? Фотографии тоже будут стёрты с сервера.')) return;
+  await api('/api/admin/products?id=' + id, { method:'DELETE' });
+  products = products.filter(x => x.id !== id);
+  updateCategoryList();
+  renderList();
+}
+
+/* ==================== СОХРАНЕНИЕ ==================== */
+async function saveSettings(){
+  const btn = $('saveBtn');
+  btn.disabled = true;
+  try{
+    settings = await api('/api/admin/settings', { method:'PUT', body: JSON.stringify(settings) });
+    dirty = false;
+    $('saveStatus').textContent = 'Сохранено ✓';
+    setTimeout(() => { $('savebar').classList.remove('show'); }, 1200);
+    applyTheme(settings.theme);
+  }catch(e){ alert('Не удалось сохранить: ' + e.message); }
+  btn.disabled = false;
+}
+
+async function onLogoSelected(e){
+  const file = e.target.files[0];
+  if(!file) return;
+  const preview = $('logoPreview');
+  preview.innerHTML = '…';
+  try{
+    const { thumb } = await resizeImage(file);
+    const res = await api('/api/admin/upload', { method:'POST', body: JSON.stringify({ dataUrl: thumb }) });
+    settings.brand.logoImage = res.id;
+    markDirty();
+    preview.innerHTML = `<img src="${thumb}">`;
+  }catch(err){
+    alert('Не удалось загрузить логотип: ' + err.message);
+    preview.innerHTML = PLACEHOLDER_SVG;
+  }
+}
+
+/* ==================== СТАРТ ==================== */
+async function init(){
+  try{
+    [settings, products] = await Promise.all([
+      api('/api/admin/settings'),
+      api('/api/admin/products'),
+    ]);
+  }catch(e){
+    $('loginErr').textContent = e.message === 'unauthorized' ? 'Неверный токен' : e.message;
+    return false;
+  }
+  try{ views = await api('/api/admin/views'); }catch(e){ views = {}; }
+  try{ stats = await api('/api/admin/stats'); }catch(e){ stats = {}; }
+
+  $('loginBox').style.display = 'none';
+  $('wrap').classList.add('open');
+  $('shopTitle').textContent = settings.brand.shopName || 'Магазин';
+  $('botStatus').textContent = stats.botConnected ? 'бот подключён' : 'бот не подключён';
+  $('botStatus').style.color = stats.botConnected ? 'var(--accent-2)' : 'var(--danger)';
+
+  applyTheme(settings.theme);
+  setCurrency({ symbol: settings.commerce.currency, position: settings.commerce.currencyPosition, locale: settings.advanced.locale });
+
+  renderTabs();
+  selectTab(activeTab);
+  return true;
+}
+
+$('loginBtn').onclick = async () => {
+  TOKEN = $('tokenInput').value.trim();
+  if(!TOKEN) return;
+  $('loginErr').textContent = '';
+  const ok = await init();
+  // токен держим только в sessionStorage: закрыл вкладку — вход слетел
+  if(ok) try{ sessionStorage.setItem('admin_token', TOKEN); }catch(e){}
+};
+$('tokenInput').onkeydown = e => { if(e.key === 'Enter') $('loginBtn').click(); };
+$('saveBtn').onclick = saveSettings;
+
+// автологин в пределах сессии, чтобы не вводить токен после каждого обновления
+try{
+  const saved = sessionStorage.getItem('admin_token');
+  if(saved){ TOKEN = saved; init(); }
+}catch(e){}
+
+// не терять несохранённые настройки при случайном закрытии
+window.addEventListener('beforeunload', e => { if(dirty){ e.preventDefault(); e.returnValue = ''; } });
+</script>
+</body>
+</html>

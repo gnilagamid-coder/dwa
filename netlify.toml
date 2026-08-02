@@ -1,0 +1,43 @@
+[build]
+  publish = "public"
+  functions = "netlify/functions"
+
+[[redirects]]
+  from = "/api/admin/products"
+  to = "/.netlify/functions/admin-products"
+  status = 200
+
+[[redirects]]
+  from = "/api/admin/settings"
+  to = "/.netlify/functions/admin-settings"
+  status = 200
+
+[[redirects]]
+  from = "/api/admin/upload"
+  to = "/.netlify/functions/admin-upload"
+  status = 200
+
+[[redirects]]
+  from = "/api/admin/publish"
+  to = "/.netlify/functions/admin-publish"
+  status = 200
+
+[[redirects]]
+  from = "/api/admin/views"
+  to = "/.netlify/functions/admin-views"
+  status = 200
+
+[[redirects]]
+  from = "/api/admin/test-notification"
+  to = "/.netlify/functions/admin-test-notification"
+  status = 200
+
+[[redirects]]
+  from = "/api/track-view"
+  to = "/.netlify/functions/track-view"
+  status = 200
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
