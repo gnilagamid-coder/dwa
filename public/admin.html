@@ -146,6 +146,32 @@
 
   .empty{color:var(--muted);text-align:center;padding:26px 0;font-size:13px}
 
+  /* Десктоп. Раньше админка оставалась колонкой 620px на любом мониторе:
+     на 1600px две трети экрана пустовали, а 14 вкладок (больше 1000px) не
+     влезали и требовали горизонтальной прокрутки — нужную приходилось искать
+     вслепую. Даём ширину и разрешаем вкладкам переноситься. */
+  @media (min-width:1000px){
+    body{padding-top:0}
+    .wrap{max-width:980px;padding:0 20px}
+    .topbar{margin:0 -20px 20px;padding:16px 20px 0}
+    .tabs{flex-wrap:wrap;overflow:visible}
+    .tab{font-size:12.5px;padding:9px 14px}
+    /* поля в две колонки — форма товара и настройки перестают быть длинной кишкой */
+    .row2>.field{min-width:180px}
+    .card{padding:20px}
+    .savebar .inner{max-width:980px}
+    .dialog{max-width:440px}
+    /* превью витрины и настройки рядом, а не друг под другом */
+    .preview-card{position:sticky;top:96px}
+  }
+  @media (min-width:1280px){
+    .wrap{max-width:1180px}
+    .savebar .inner{max-width:1180px}
+    /* панель «Тема» в две колонки: слева телефон с превью, справа параметры */
+    #panel-theme{columns:2;column-gap:18px}
+    #panel-theme>.card{break-inside:avoid;margin-bottom:18px}
+  }
+
   /* превью витрины «в телефоне» */
   .preview-card h2{align-items:center}
   .phone{

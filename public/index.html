@@ -114,8 +114,17 @@
     font-family:var(--font-display);font-size:calc(12px * var(--fs));font-weight:600;
     letter-spacing:1px;text-transform:var(--caps);padding:6px 0;
   }
-  .marquee span{display:inline-block;padding-left:100%;animation:marquee 18s linear infinite}
-  @keyframes marquee{to{transform:translateX(-100%)}}
+  /* Бесшовная бегущая строка из двух одинаковых копий: трек едет ровно на
+     половину своей ширины и в этот момент вторая копия оказывается там, где
+     была первая — склейки не видно.
+     Было `padding-left:100%` на одном span: текст стартовал за правым краем и
+     на широком экране полоса стояла пустой 71% времени (12.7 с из 18) — именно
+     это и выглядело на десктопе как пустая цветная плашка. На телефоне баг был
+     незаметен, потому что 100% там всего ~360px. */
+  .marquee-track{display:flex;width:max-content;animation:marquee var(--marquee-dur,24s) linear infinite}
+  .marquee-track span{padding-right:2.5em;flex:0 0 auto}
+  .marquee:hover .marquee-track{animation-play-state:paused}
+  @keyframes marquee{to{transform:translateX(-50%)}}
 
   /* search */
   .search{
@@ -485,7 +494,9 @@
   </div>
 </header>
 <div class="tagline" id="tagline" style="display:none"></div>
-<div class="marquee" id="marquee" style="display:none"><span></span></div>
+<div class="marquee" id="marquee" style="display:none">
+  <div class="marquee-track" id="marqueeTrack"><span></span><span aria-hidden="true"></span></div>
+</div>
 
 <div class="search" id="searchBox">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
@@ -1799,7 +1810,19 @@ function applySettings(s){
   const mq = document.getElementById('marquee');
   if(t.marquee && t.marqueeText){
     mq.style.display = '';
-    mq.querySelector('span').textContent = (t.marqueeText + '   ✦   ').repeat(3);
+    // Одна копия должна быть шире экрана, иначе при прокрутке на -50% появится
+    // пустой хвост. Повторяем текст, пока не наберём хотя бы ширину окна.
+    const unit = t.marqueeText + '   ✦   ';
+    const reps = Math.max(2, Math.ceil(window.innerWidth / Math.max(60, unit.length * 9)));
+    const chunk = unit.repeat(reps);
+    mq.querySelectorAll('.marquee-track span').forEach(el => { el.textContent = chunk; });
+    // Скорость постоянная в пикселях в секунду: иначе на широком экране строка
+    // ползёт заметно быстрее, чем на телефоне, при одной и той же длительности.
+    // Замер синхронный, а не в requestAnimationFrame: rAF не вызывается вообще,
+    // пока вкладка неактивна, и строка осталась бы с дефолтной скоростью.
+    const track = document.getElementById('marqueeTrack');
+    const half = track.scrollWidth / 2;   // чтение scrollWidth само дожимает лейаут
+    if(half > 0) track.style.setProperty('--marquee-dur', Math.max(8, half / 60).toFixed(1) + 's');
   } else mq.style.display = 'none';
 
   // каталог
