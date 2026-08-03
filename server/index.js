@@ -26,6 +26,7 @@ const { sanitize } = require('./settings');
 const { tgApi, validateInitData, esc, BOT_TOKEN, API_BASE } = require('./telegram');
 const bot = require('./bot');
 const payments = require('./payments');
+const { resolveTheme } = require('../public/theme-core.js');
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '127.0.0.1';
@@ -98,10 +99,14 @@ function getSettings() { return sanitize(store.read('settings', {})); }
 // На витрину не отдаём то, что клиенту знать незачем. Особенно creds платёжного
 // мерчанта: /api/settings открыт всем без авторизации, и утечь секрет там нельзя.
 function publicSettings(s) {
-  const { notify, payments, ...rest } = s;
+  const { notify, payments, promo, ...rest } = s;
   return {
     ...rest,
     notifyEnabled: notify.enabled,
+    // Сами коды наружу не отдаём — иначе их можно было бы просто прочитать
+    // в /api/settings и раздать. Клиент только знает, что поле надо показать,
+    // а проверка кода идёт отдельным запросом на сервер.
+    promo: { enabled: promo.enabled, label: promo.label },
     payments: {
       enabled: payments.enabled,
       required: payments.required,
@@ -111,12 +116,84 @@ function publicSettings(s) {
   };
 }
 
+// Проверка промокода и расчёт скидки. Живёт на сервере и вызывается ДВАЖДЫ:
+// при вводе кода покупателем (показать сумму) и при оформлении заказа (посчитать
+// по-настоящему). Клиенту доверять нельзя — он мог бы прислать любую скидку.
+function applyPromo(s, rawCode, total) {
+  const code = String(rawCode || '').trim().toUpperCase();
+  if (!code) return { ok: false, error: 'Введите промокод' };
+  if (!s.promo.enabled) return { ok: false, error: 'Промокоды сейчас не принимаются' };
+
+  const p = s.promo.codes.find(c => c.code === code);
+  // Один и тот же ответ на «нет такого» и «выключен» — иначе перебором можно
+  // выяснить, какие коды вообще существуют.
+  if (!p || !p.active) return { ok: false, error: 'Промокод не найден' };
+  if (p.usesLeft !== null && p.usesLeft <= 0) return { ok: false, error: 'Промокод уже использован' };
+  if (p.minTotal && total < p.minTotal) {
+    return { ok: false, error: `Промокод действует от ${money(p.minTotal, s)}` };
+  }
+
+  const raw = p.type === 'percent' ? Math.round(total * p.value / 100) : p.value;
+  const discount = Math.max(0, Math.min(raw, total)); // скидка не больше суммы заказа
+  return {
+    ok: true, code: p.code, discount,
+    total: total - discount,
+    label: p.type === 'percent' ? `−${p.value}%` : `−${money(p.value, s)}`,
+  };
+}
+
+// Списываем одно применение кода. Отдельно от расчёта: проверять можно сколько
+// угодно раз, а тратить — только при реальном заказе.
+function consumePromo(code) {
+  const raw = store.read('settings', {});
+  const list = (raw.promo && raw.promo.codes) || [];
+  const p = list.find(c => String(c.code || '').toUpperCase() === code);
+  if (!p) return;
+  p.used = (p.used || 0) + 1;
+  if (p.usesLeft !== null && p.usesLeft !== undefined) p.usesLeft = Math.max(0, p.usesLeft - 1);
+  store.write('settings', raw);
+}
+
 const money = (n, s) => {
   const v = Number(n).toLocaleString(s.advanced.locale || 'ru-RU');
   return s.commerce.currencyPosition === 'before' ? `${s.commerce.currency}${v}` : `${v} ${s.commerce.currency}`;
 };
 
 // ---------- статика ----------
+// Тема, зашитая прямо в HTML. Клиент получает готовые CSS-переменные в первом
+// же байте ответа и рисует правильную палитру сразу — без «дефолтная тёмная,
+// а через секунду нужная». Кэш в localStorage от этого не спасал: он пуст при
+// первом заходе, а Telegram чистит хранилище webview довольно охотно.
+const FONT_STACKS_SRV = {
+  'Oswald': "'Oswald',sans-serif",
+  'Archivo Black': "'Archivo Black',sans-serif",
+  'Inter': "'Inter',-apple-system,sans-serif",
+  'Space Grotesk': "'Space Grotesk',sans-serif",
+  'system': "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif",
+};
+const DENSITY_SRV = { compact: 0.8, normal: 1, roomy: 1.25 };
+
+function bootThemeCSS(s) {
+  const r = resolveTheme(s.theme);
+  const ratio = s.theme.imageRatio === 'square' ? '1/1' : s.theme.imageRatio === 'portrait' ? '3/4' : '4/3';
+  const vars = [
+    `--bg:${r.bg}`, `--surface:${r.surface}`, `--surface-2:${r.surface2}`,
+    `--text:${r.text}`, `--muted:${r.muted}`, `--accent:${r.accent}`,
+    `--accent-2:${r.accent2}`, `--heart:${r.accent}`,
+    `--radius:${r.radius}px`, `--bw:${r.borderWidth}px`,
+    `--fs:${(r.fontScale / 100).toFixed(2)}`,
+    `--gap:${(DENSITY_SRV[r.density] || 1).toFixed(2)}`,
+    `--caps:${r.uppercase ? 'uppercase' : 'none'}`,
+    `--font-display:${FONT_STACKS_SRV[r.fontDisplay] || FONT_STACKS_SRV.system}`,
+    `--cols:${s.theme.gridColumns}`, `--ratio:${ratio}`,
+  ].join(';');
+  const cls = [s.theme.grain && 'grain', s.theme.diagonal && 'diagonal',
+    s.theme.animations === 'off' && 'anim-off',
+    s.theme.animations === 'reduced' && 'anim-reduced'].filter(Boolean).join(' ');
+  return `<style id="bootTheme">:root{${vars}}</style>` +
+    (cls ? `<script>document.documentElement.dataset.bootClass=${JSON.stringify(cls)}</script>` : '');
+}
+
 async function serveStatic(req, res, urlPath) {
   let rel = decodeURIComponent(urlPath.split('?')[0]);
   if (rel === '/' || rel === '') rel = '/index.html';
@@ -142,6 +219,24 @@ async function serveStatic(req, res, urlPath) {
       res.writeHead(304, { ETag: etag, 'Cache-Control': cacheControl });
       return res.end();
     }
+    // index.html отдаём с уже подставленной темой — единственный файл, который
+    // мы модифицируем на лету, поэтому он не стримится, а собирается в памяти
+    // (70 КБ, это ничего не стоит).
+    if (rel === '/index.html') {
+      let html = await fsp.readFile(full, 'utf8');
+      html = html.replace('</head>', bootThemeCSS(getSettings()) + '</head>');
+      const buf = Buffer.from(html, 'utf8');
+      const h = { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-cache' };
+      if (/\bgzip\b/.test(req.headers['accept-encoding'] || '')) {
+        h['Content-Encoding'] = 'gzip'; h['Vary'] = 'Accept-Encoding';
+        const gz = zlib.gzipSync(buf, { level: 6 });
+        res.writeHead(200, { ...h, 'Content-Length': gz.length });
+        return res.end(gz);
+      }
+      res.writeHead(200, { ...h, 'Content-Length': buf.length });
+      return res.end(buf);
+    }
+
     const headers = { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Cache-Control': cacheControl, ETag: etag };
 
     // Текстовые файлы сжимаем: index.html — это ~70 КБ разметки со стилями и
@@ -164,8 +259,9 @@ async function serveStatic(req, res, urlPath) {
 }
 
 // ---------- заказы ----------
-function buildOrderText(s, items, c, tgUser) {
-  const total = items.reduce((sum, i) => sum + i.price * i.qty, 0);
+function buildOrderText(s, items, c, tgUser, promo, finalTotal) {
+  const subtotal = items.reduce((sum, i) => sum + i.price * i.qty, 0);
+  const total = finalTotal === undefined ? subtotal : finalTotal;
   const L = [];
   L.push('🛒 <b>Новый заказ</b>');
   L.push('');
@@ -181,6 +277,10 @@ function buildOrderText(s, items, c, tgUser) {
   L.push('📦 <b>Товары:</b>');
   items.forEach(i => L.push(`• ${esc(i.name)} × ${i.qty} = ${money(i.price * i.qty, s)}`));
   L.push('');
+  if (promo) {
+    L.push(`Сумма: ${money(subtotal, s)}`);
+    L.push(`🏷 Промокод <code>${esc(promo.code)}</code> (${esc(promo.label)}): −${money(promo.discount, s)}`);
+  }
   L.push(`💰 <b>Итого: ${money(total, s)}</b>`);
   L.push(`🕒 ${new Date().toLocaleString(s.advanced.locale, { timeZone: s.advanced.timezone })}`);
   if (s.notify.includeCustomerLink && tgUser) {
@@ -270,6 +370,24 @@ async function handleApi(req, res, url) {
     return json(res, 200, { ok: true });
   }
 
+  // Проверка промокода до оформления — чтобы покупатель сразу видел новую сумму
+  if (p === '/api/promo/check' && method === 'POST') {
+    if (!rateLimit('promo:' + ip, 20, 60000)) return json(res, 429, { error: 'Слишком много попыток, подождите минуту' });
+    let body; try { body = await readBody(req); } catch (e) { return json(res, 400, { error: 'bad json' }); }
+
+    const s = getSettings();
+    const products = store.read('products', []);
+    // сумму считаем сами по корзине из запроса, но по ценам из базы
+    const total = (body.items || []).reduce((sum, i) => {
+      const prod = products.find(x => x.id === Number(i.id));
+      return sum + (prod ? prod.price * Math.max(1, Math.min(999, Number(i.qty) || 1)) : 0);
+    }, 0);
+
+    const r = applyPromo(s, body.code, total);
+    if (!r.ok) return json(res, 200, { ok: false, error: r.error });
+    return json(res, 200, { ok: true, code: r.code, discount: r.discount, total: r.total, label: r.label });
+  }
+
   if (p === '/api/checkout' && method === 'POST') {
     if (!rateLimit(ip, 10, 60000)) return json(res, 429, { error: 'слишком много запросов, подождите минуту' });
     let body;
@@ -295,18 +413,29 @@ async function handleApi(req, res, url) {
       return json(res, 400, { error: `Минимальный заказ — ${money(s.commerce.minOrder, s)}` });
     }
 
+    // Промокод пересчитываем здесь заново, а не берём скидку из запроса:
+    // клиент мог бы прислать любую сумму. Если код за это время кончился —
+    // заказ всё равно проходит, просто без скидки, и это видно в уведомлении.
+    let promo = null;
+    if (body.promoCode) {
+      const r = applyPromo(s, body.promoCode, total);
+      if (r.ok) promo = { code: r.code, discount: r.discount, label: r.label };
+    }
+    const finalTotal = total - (promo ? promo.discount : 0);
+
     const c = body.customer || {};
-    const built = buildOrderText(s, items, c, tgUser);
+    const built = buildOrderText(s, items, c, tgUser, promo, finalTotal);
     let text = built.text;
     if (!tgUser) text += '\n\n⚠️ <i>Заказ оформлен вне Telegram — личность не подтверждена</i>';
 
     const order = {
       id: Date.now(),
       at: new Date().toISOString(),
-      items, total, customer: c,
+      items, total: finalTotal, subtotal: total, promo, customer: c,
       user: tgUser ? { id: tgUser.id, username: tgUser.username || '', name: tgUser.first_name || '' } : null,
       status: 'new',
     };
+    if (promo) consumePromo(promo.code);
     const orders = store.read('orders', []);
     orders.unshift(order);
     store.write('orders', orders.slice(0, 500));

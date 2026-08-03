@@ -69,6 +69,10 @@
   .switch-thumb{width:18px;height:18px;background:var(--text);position:absolute;top:3px;left:3px;transition:transform .15s}
   .switch-track.on .switch-thumb{transform:translateX(18px);background:var(--bg)}
 
+  .promo-item{background:var(--surface-2);padding:12px;margin-bottom:10px;border-left:3px solid var(--accent)}
+  .promo-item.off{opacity:.5;border-left-color:var(--muted)}
+  .promo-item .field{margin-bottom:8px}
+  .promo-used{font-size:11px;color:var(--muted);margin-top:2px}
   .marks{display:grid;grid-template-columns:repeat(auto-fill,minmax(48px,1fr));gap:8px}
   .mark{
     aspect-ratio:1;border:2px solid var(--surface-2);background:var(--surface-2);
@@ -217,6 +221,7 @@
   <div class="panel" id="panel-commerce"></div>
   <div class="panel" id="panel-checkout"></div>
   <div class="panel" id="panel-payments"></div>
+  <div class="panel" id="panel-promo"></div>
   <div class="panel" id="panel-notify"></div>
   <div class="panel" id="panel-bot"></div>
   <div class="panel" id="panel-channel"></div>
@@ -234,7 +239,8 @@
 
 <!-- ?v= бампается при релизе: страхует от промежуточных прокси, которые
      игнорируют no-cache и держат старый shared.js поверх новой разметки -->
-<script src="/shared.js?v=2.1"></script>
+<script src="/theme-core.js?v=2.2"></script>
+<script src="/shared.js?v=2.2"></script>
 <script>
 let TOKEN = '';
 let settings = null;
@@ -484,7 +490,7 @@ function renderLines(box, path){
 /* ==================== ВКЛАДКИ ==================== */
 const TABS = [
   ['dashboard','Обзор'], ['brand','Бренд'], ['theme','Тема'], ['catalog','Каталог'],
-  ['commerce','Продажи'], ['checkout','Форма заказа'], ['payments','Оплата'], ['notify','Уведомления'],
+  ['commerce','Продажи'], ['checkout','Форма заказа'], ['payments','Оплата'], ['promo','Промокоды'], ['notify','Уведомления'],
   ['bot','Бот'], ['channel','Канал'], ['products','Товары'], ['orders','Заказы'], ['advanced','Ещё'],
 ];
 let activeTab = 'dashboard';
@@ -524,6 +530,7 @@ function buildPanel(id){
   if(id === 'commerce')  return renderPanel('panel-commerce', PANEL_COMMERCE());
   if(id === 'checkout')  return renderPanel('panel-checkout', PANEL_CHECKOUT());
   if(id === 'payments')  return buildPayments();
+  if(id === 'promo')     return buildPromo();
   if(id === 'notify')    return buildNotify();
   if(id === 'bot')       return renderPanel('panel-bot', PANEL_BOT());
   if(id === 'channel')   return renderPanel('panel-channel', PANEL_CHANNEL());
@@ -826,6 +833,95 @@ async function buildPayments(){
     });
   }
   $('callbackUrl').textContent = `${location.origin}/api/pay/callback/${active ? active.key : 'platega'}`;
+}
+
+// ---------- Промокоды ----------
+function buildPromo(){
+  const codes = settings.promo.codes || [];
+  $('panel-promo').innerHTML = `
+    ${renderCard({ title:'Промокоды',
+      hint:'Поле для кода появится в форме заказа. Скидку считает сервер — подделать её из браузера нельзя, ' +
+           'а сами коды не отдаются на витрину, поэтому подобрать их списком не получится.',
+      fields:[
+        F.sw('promo.enabled','Принимать промокоды'),
+        F.text('promo.label','Подпись поля', { ph:'Промокод' }),
+      ]})}
+    <div class="card">
+      <h2>Коды (${codes.length})</h2>
+      <div id="promoList"></div>
+      <button type="button" class="secondary" id="promoAdd" style="width:100%;margin-top:10px">+ Добавить код</button>
+    </div>`;
+  bindPanel($('panel-promo'));
+  renderPromoList();
+  $('promoAdd').onclick = () => {
+    settings.promo.codes = [...(settings.promo.codes || []),
+      { code:'', type:'percent', value:10, minTotal:0, usesLeft:null, used:0, active:true }];
+    markDirty(); buildPromo();
+  };
+}
+
+function renderPromoList(){
+  const box = $('promoList');
+  const codes = settings.promo.codes || [];
+  if(!codes.length){ box.innerHTML = '<div class="empty">Кодов пока нет</div>'; return; }
+  box.innerHTML = codes.map((c,i)=>`
+    <div class="promo-item ${c.active?'':'off'}">
+      <div class="row2">
+        <div class="field" style="flex:2">
+          <label>Код</label>
+          <input data-p="${i}" data-f="code" value="${esc(c.code)}" placeholder="SALE20" style="text-transform:uppercase">
+        </div>
+        <div class="field">
+          <label>Тип</label>
+          <select data-p="${i}" data-f="type">
+            <option value="percent" ${c.type==='percent'?'selected':''}>Процент</option>
+            <option value="fixed" ${c.type==='fixed'?'selected':''}>Сумма</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>${c.type==='percent'?'Скидка, %':'Скидка'}</label>
+          <input type="number" min="0" data-p="${i}" data-f="value" value="${c.value}">
+        </div>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label>Заказ от</label>
+          <input type="number" min="0" data-p="${i}" data-f="minTotal" value="${c.minTotal}" placeholder="0 — без ограничения">
+        </div>
+        <div class="field">
+          <label>Осталось применений</label>
+          <input type="number" min="0" data-p="${i}" data-f="usesLeft" value="${c.usesLeft ?? ''}" placeholder="без ограничения">
+        </div>
+        <div class="field" style="flex:0 0 auto;display:flex;align-items:flex-end;gap:6px">
+          <button type="button" class="icon-toggle ${c.active?'on':''}" data-toggle="${i}" title="${c.active?'Выключить':'Включить'}">${c.active?'✓':'○'}</button>
+          <button type="button" class="row-remove" data-del="${i}" title="Удалить">${TRASH_SVG}</button>
+        </div>
+      </div>
+      <div class="promo-used">Использован раз: ${c.used || 0}${c.usesLeft===null?'':` · осталось ${c.usesLeft}`}</div>
+    </div>`).join('');
+
+  box.querySelectorAll('[data-p]').forEach(el => {
+    el.oninput = el.onchange = () => {
+      const c = settings.promo.codes[Number(el.dataset.p)];
+      const f = el.dataset.f;
+      if(f === 'usesLeft') c[f] = el.value === '' ? null : Math.max(0, Number(el.value) || 0);
+      else if(f === 'value' || f === 'minTotal') c[f] = Math.max(0, Number(el.value) || 0);
+      else if(f === 'code') c[f] = el.value.toUpperCase();
+      else c[f] = el.value;
+      markDirty();
+      if(f === 'type') renderPromoList(); // меняется подпись поля скидки
+    };
+  });
+  box.querySelectorAll('[data-toggle]').forEach(b => b.onclick = () => {
+    const c = settings.promo.codes[Number(b.dataset.toggle)];
+    c.active = !c.active; markDirty(); renderPromoList();
+  });
+  box.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
+    const c = settings.promo.codes[Number(b.dataset.del)];
+    if(c.code && !await confirmDialog(`Удалить промокод ${c.code}?`)) return;
+    settings.promo.codes.splice(Number(b.dataset.del), 1);
+    markDirty(); buildPromo();
+  });
 }
 
 // ---------- Уведомления ----------

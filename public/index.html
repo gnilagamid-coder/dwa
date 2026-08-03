@@ -9,7 +9,8 @@
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <!-- ?v= бампается при релизе: страхует от промежуточных прокси, которые
      игнорируют no-cache и держат старый shared.js поверх новой разметки -->
-<script src="/shared.js?v=2.1"></script>
+<script src="/theme-core.js?v=2.2"></script>
+<script src="/shared.js?v=2.2"></script>
 <style>
   :root{
     /* дефолты до загрузки настроек — чтобы первый кадр не был белым «мигом» */
@@ -360,6 +361,21 @@
   .field textarea{resize:vertical;min-height:66px}
   .field.invalid input,.field.invalid textarea{border-color:var(--accent)}
   .field-error{color:var(--accent);font-size:calc(11px * var(--fs));margin-top:4px}
+  /* Состав заказа на финальном экране. Раньше заказ был только внутри кнопки
+     «Скопировать» — покупатель не видел, что именно он отправил, и не мог
+     перепроверить сумму или адрес, не выходя из мини-аппа. */
+  .order-receipt{
+    background:var(--surface-2);border-radius:var(--radius);padding:14px;margin-bottom:16px;
+    font-family:inherit;font-size:calc(13px * var(--fs));line-height:1.55;color:var(--text);
+    white-space:pre-wrap;word-break:break-word;max-height:220px;overflow-y:auto;
+  }
+  /* промокод */
+  .promo-row{display:flex;gap:8px}
+  .promo-row input{flex:1;text-transform:uppercase}
+  .promo-apply{width:auto;flex:0 0 auto;margin:0;padding:0 18px;min-height:48px;white-space:nowrap}
+  .promo-msg{font-size:calc(12px * var(--fs));margin-top:6px;line-height:1.4;color:var(--accent-2)}
+  .promo-msg.err{color:var(--accent)}
+
   .check-row{display:flex;gap:10px;align-items:flex-start;margin-bottom:14px;font-size:calc(13px * var(--fs));color:var(--muted);line-height:1.4}
   .check-row input{width:20px;height:20px;flex-shrink:0;accent-color:var(--accent)}
 
@@ -403,9 +419,46 @@
     .grid{--cols:4}
     .fab-cart{right:calc(50vw - 550px + 16px)}
   }
-  @media (min-width:560px){
+  /* Планшет: шторка перестаёт быть во всю ширину, но всё ещё выезжает снизу —
+     на таком размере это ещё читается как родной жест. */
+  @media (min-width:560px) and (max-width:899px){
     .overlay .sheet{left:50%;right:auto;width:480px;transform:translate(-50%,100%)}
     .overlay.open .sheet{transform:translate(-50%,0)}
+  }
+
+  /* Десктоп: снизу выезжать нечему — это не телефон. Шторка становится обычным
+     центрированным диалогом. Раньше на мониторе 1440px модалка шириной 480px
+     висела приклеенной к нижнему краю — выглядело как недоделанный мобильный
+     макет, потому что им и было. */
+  @media (min-width:900px){
+    .overlay{display:flex;align-items:center;justify-content:center;padding:32px}
+    .overlay .sheet{
+      position:relative;left:auto;right:auto;bottom:auto;
+      width:min(560px,100%);max-height:100%;
+      border:var(--bw) solid var(--surface-2);border-top:calc(var(--bw) * 3) solid var(--accent);
+      transform:translateY(12px) scale(.985);opacity:0;
+      transition:transform .22s cubic-bezier(.2,.8,.2,1),opacity .18s;
+    }
+    .overlay.open .sheet{transform:none;opacity:1}
+    .sheet-scroll{max-height:min(76vh,720px)}
+    .sheet-close{top:14px;right:14px}
+    /* поле поиска во всю ширину колонки на десктопе смотрится нелепо */
+    .search{max-width:520px}
+    /* курсор на десктопе есть — показываем отклик на наведение */
+    .card{transition:transform .12s,border-color .12s}
+    .card:hover{border-color:var(--accent)}
+    .cat-chip:hover{color:var(--text);border-color:var(--muted)}
+    .menu-item:hover{color:var(--accent)}
+  }
+
+  /* Совсем широкие экраны: не растягиваем текст на всю ширину, но и не жмём
+     каталог в узкую колонку с пустотой по бокам. */
+  @media (min-width:1400px){
+    body{max-width:1320px}
+    .grid{--cols:5}
+    /* FAB считается от той же max-width, что и колонка контента, иначе на
+       широком мониторе он уезжает от каталога в пустоту */
+    .fab-cart{right:calc(50vw - 660px + 16px)}
   }
   @media (prefers-reduced-motion:reduce){ *{animation-duration:.01ms!important;transition-duration:.01ms!important} }
 </style>
@@ -632,7 +685,15 @@ const LS_THEME = 'shop_theme_v2';
 function cacheTheme(theme, brand){
   try{ localStorage.setItem(LS_THEME, JSON.stringify({ theme, brand })); }catch(e){}
 }
-(function applyCachedTheme(){
+(function applyBootTheme(){
+  // Основной путь: сервер уже вписал переменные в <style id="bootTheme">, здесь
+  // только доносим классы-модификаторы, которые живут на <body>.
+  const boot = document.documentElement.dataset.bootClass;
+  if(boot) boot.split(' ').forEach(c => c && document.body.classList.add(c));
+
+  // Запасной путь — для превью в админке и для случая, когда HTML пришёл
+  // из кэша прокси без подстановки.
+  if(document.getElementById('bootTheme')) return;
   try{
     const saved = JSON.parse(localStorage.getItem(LS_THEME) || 'null');
     if(!saved || !saved.theme) return;
@@ -1273,8 +1334,13 @@ function openBuyLink(rawUrl, text){
     const u = new URL(url);
     isTelegramLink = (u.hostname === 't.me' || u.hostname === 'telegram.me');
     if((isTelegramLink || u.hostname === 'wa.me') && text){
-      u.searchParams.set('text', text);
-      finalUrl = u.toString();
+      // Собираем query вручную. searchParams.set() сериализует по правилам
+      // form-urlencoded и превращает пробелы в «+»; Telegram разбирает
+      // draft_text как обычную percent-строку и показывает плюсы буквально —
+      // из-за этого черновик выглядел пустым или ломаным. encodeURIComponent
+      // даёт %20, который понимают и Telegram, и WhatsApp.
+      const base = u.origin + u.pathname;
+      finalUrl = `${base}?text=${encodeURIComponent(text)}`;
     }
   }catch(e){}
 
@@ -1395,11 +1461,67 @@ function renderCheckoutForm(){
     ${hasDelivery ? selectField('coDelivery','Доставка', c.deliveryMethods) : ''}
     ${hasDelivery && c.askAddress ? `<div class="field"><label>Адрес доставки</label><textarea id="coAddress" placeholder="Город, улица, дом, квартира"></textarea></div>` : ''}
     ${c.askComment ? `<div class="field"><label>Комментарий</label><textarea id="coComment" placeholder="Пожелания к заказу"></textarea></div>` : ''}
+    ${settings.promo && settings.promo.enabled ? `
+      <div class="field promo-field">
+        <label>${esc(settings.promo.label || 'Промокод')}</label>
+        <div class="promo-row">
+          <input id="coPromo" placeholder="Введите код" autocomplete="off" autocapitalize="characters" value="${esc(appliedPromo ? appliedPromo.code : '')}">
+          <button type="button" class="secondary-btn promo-apply" id="coPromoBtn">${appliedPromo ? 'Убрать' : 'Применить'}</button>
+        </div>
+        <div class="promo-msg" id="coPromoMsg">${appliedPromo ? `Скидка ${esc(appliedPromo.label)} — минус ${fmt(appliedPromo.discount)}` : ''}</div>
+      </div>` : ''}
     ${c.requireAgreement ? `<label class="check-row"><input type="checkbox" id="coAgree"><span>${esc(c.agreementText)}</span></label>` : ''}
-    <div class="cart-total" style="border:none;padding-top:0"><span>К оплате</span><span>${settings.commerce.priceHidden ? '—' : fmt(orderTotal())}</span></div>
+    ${appliedPromo ? `<div class="cart-total" style="border:none;padding:0 4px 6px;font-size:calc(14px * var(--fs))"><span style="color:var(--muted)">Сумма</span><span style="color:var(--muted)">${fmt(orderTotal())}</span></div>` : ''}
+    <div class="cart-total" style="border:none;padding-top:0"><span>К оплате</span><span>${settings.commerce.priceHidden ? '—' : fmt(payableTotal())}</span></div>
     <button class="checkout-btn" id="coSubmitBtn">Подтвердить заказ</button>
   `;
   document.getElementById('coSubmitBtn').onclick = submitOrder;
+  const promoBtn = document.getElementById('coPromoBtn');
+  if(promoBtn) promoBtn.onclick = togglePromo;
+}
+
+// --- промокод ---
+// Скидку считает сервер и только он: на клиенте её было бы тривиально подделать,
+// поэтому здесь мы храним лишь то, что сервер уже подтвердил.
+let appliedPromo = null;
+function payableTotal(){
+  return Math.max(0, orderTotal() - (appliedPromo ? appliedPromo.discount : 0));
+}
+
+async function togglePromo(){
+  const input = document.getElementById('coPromo');
+  const msg = document.getElementById('coPromoMsg');
+  const btn = document.getElementById('coPromoBtn');
+
+  if(appliedPromo){                 // кнопка работает как «Убрать»
+    appliedPromo = null;
+    renderCheckoutForm();
+    haptic.tap();
+    return;
+  }
+
+  const code = input.value.trim();
+  if(!code){ input.focus(); return; }
+
+  btn.disabled = true;
+  msg.className = 'promo-msg';
+  msg.textContent = 'Проверяем…';
+  try{
+    const res = await fetch('/api/promo/check', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ code, items: orderItems() }),
+    });
+    const data = await res.json();
+    if(!data.ok) throw new Error(data.error || 'Промокод не найден');
+    appliedPromo = { code: data.code, discount: data.discount, label: data.label };
+    haptic.ok();
+    renderCheckoutForm();           // перерисовываем — обновится и «К оплате»
+  }catch(e){
+    haptic.err();
+    msg.className = 'promo-msg err';
+    msg.textContent = e.message;
+    btn.disabled = false;
+  }
 }
 
 async function submitOrder(){
@@ -1432,7 +1554,9 @@ async function submitOrder(){
     const res = await fetch('/api/checkout', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ initData: tg?.initData || '', items, customer }),
+      // код шлём, а не готовую скидку: сервер пересчитает сам
+      body: JSON.stringify({ initData: tg?.initData || '', items, customer,
+        promoCode: appliedPromo ? appliedPromo.code : '' }),
     });
     const data = await res.json();
     if(!res.ok || !data.ok) throw new Error(data.error || 'Не удалось отправить заказ');
@@ -1440,6 +1564,7 @@ async function submitOrder(){
     showCheckoutSuccess(data.orderText, data.orderId);
     // заявка по одному товару корзину не трогает — чистим только то, что отправили
     if(inquiryItem) inquiryItem = null; else cart.clear();
+    appliedPromo = null; // код израсходован, на следующий заказ не переносится
     updateCartUI();
     loadProducts(); // остатки на сервере уменьшились — подтягиваем актуальные
   }catch(e){
@@ -1455,7 +1580,8 @@ function showCheckoutSuccess(orderText, orderId){
   const pay = settings.payments || {};
   document.getElementById('checkoutBody').innerHTML = `
     <div class="sheet-title">${esc(c.successTitle)}</div>
-    <div style="font-size:calc(14px * var(--fs));color:var(--muted);line-height:1.6;margin-bottom:20px;white-space:pre-line">${esc(c.successText)}</div>
+    <div style="font-size:calc(14px * var(--fs));color:var(--muted);line-height:1.6;margin-bottom:16px;white-space:pre-line">${esc(c.successText)}</div>
+    ${orderText ? `<pre class="order-receipt">${esc(orderText)}</pre>` : ''}
     ${pay.enabled && orderId ? `<button class="checkout-btn" id="coPayBtn" style="margin-bottom:10px">${esc(pay.buttonText || 'Оплатить онлайн')}</button>` : ''}
     <button class="${pay.enabled && orderId ? 'secondary-btn' : 'checkout-btn'}" id="coCopyBtn" style="margin-bottom:10px">Скопировать заказ</button>
     ${settings.manager.buyUrl ? `<button class="secondary-btn" id="coWriteBtn">Написать менеджеру</button>` : ''}
