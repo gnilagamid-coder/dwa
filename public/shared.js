@@ -158,6 +158,11 @@ function loadFont(name) {
   const link = document.createElement('link');
   link.id = id;
   link.rel = 'stylesheet';
+  // media="print" + onload — файл качается в фоне и не задерживает первый кадр.
+  // Витрина сразу рисуется системным шрифтом и подменяет его, когда файл придёт
+  // (у ссылки стоит display=swap, так что текст не мигает пустотой).
+  link.media = 'print';
+  link.onload = function(){ this.media = 'all'; this.onload = null; };
   link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(name)}:wght@400;500;600;700&display=swap`;
   document.head.appendChild(link);
 }

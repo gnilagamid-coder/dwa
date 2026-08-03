@@ -6,7 +6,11 @@
 <title>Админка магазина</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&display=swap" rel="stylesheet">
+<!-- media="print" снимает блокировку рендера: браузер грузит файл в фоне,
+     а onload переключает его на экранные стили. Без этого админка ждала
+     ответа fonts.googleapis.com прежде чем показать хоть что-то. -->
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&display=swap"
+      rel="stylesheet" media="print" onload="this.media='all'">
 <style>
   :root{
     --bg:#0d0d0d; --surface:#161616; --surface-2:#202020;
@@ -120,6 +124,7 @@
   .row .price{font-family:var(--font-display);font-size:12px;color:var(--accent-2);font-weight:600}
   .row .category{font-size:11px;color:var(--muted);background:var(--surface-2);padding:2px 7px}
   .row .actions{display:flex;gap:5px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;max-width:112px}
+  .row .actions button:disabled{opacity:.25}
   .row button.icon-toggle{padding:0;width:32px;height:32px;display:flex;align-items:center;justify-content:center;background:var(--surface-2)}
   .row button.icon-toggle svg{width:14px;height:14px}
   .row button.icon-toggle.on{background:var(--accent);color:var(--bg)}
@@ -172,7 +177,14 @@
   .savebar .inner{max-width:620px;margin:0 auto;display:flex;gap:10px;align-items:center}
   .savebar button{flex:1}
   .savebar .status{font-size:12px;color:var(--accent-2);flex:0 0 auto}
-  .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:80px;background:var(--surface-2);border:1px solid var(--accent);padding:11px 16px;font-size:13px;z-index:50;max-width:90%;text-align:center}
+  .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:80px;background:var(--surface-2);border:1px solid var(--accent);padding:11px 16px;font-size:13px;z-index:50;max-width:90%;text-align:center;line-height:1.45}
+  .toast.err{background:var(--danger);border-color:var(--danger);color:#fff;font-weight:600}
+
+  .dialog-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:60;display:flex;align-items:center;justify-content:center;padding:20px}
+  .dialog{background:var(--surface);border:1px solid var(--surface-2);border-top:2px solid var(--accent);padding:20px;max-width:400px;width:100%}
+  .dialog-text{font-size:14px;line-height:1.5;margin-bottom:18px}
+  .dialog-actions{display:flex;gap:8px}
+  .dialog-actions button{flex:1}
 </style>
 </head>
 <body>
@@ -257,12 +269,41 @@ async function api(path, opts = {}){
   return data;
 }
 
-function toast(msg){
+// Собственные уведомления и подтверждения вместо alert/confirm: во встроенном
+// браузере Telegram нативные диалоги блокируются молча, и продавец видит, что
+// «кнопка не работает», без единого сообщения об ошибке.
+function toast(msg, isError){
+  document.querySelectorAll('.toast').forEach(t => t.remove()); // не копим стопку
   const el = document.createElement('div');
-  el.className = 'toast';
+  el.className = 'toast' + (isError ? ' err' : '');
   el.textContent = msg;
   document.body.appendChild(el);
-  setTimeout(()=> el.remove(), 2600);
+  setTimeout(()=> el.remove(), isError ? 4200 : 2600);
+}
+
+// Промис-подтверждение с фокусом и Esc — замена confirm()
+function confirmDialog(text, okLabel = 'Удалить'){
+  return new Promise(resolve => {
+    const wrap = document.createElement('div');
+    wrap.className = 'dialog-backdrop';
+    wrap.innerHTML = `
+      <div class="dialog" role="alertdialog" aria-modal="true">
+        <div class="dialog-text"></div>
+        <div class="dialog-actions">
+          <button type="button" class="secondary" data-no>Отмена</button>
+          <button type="button" data-yes>${esc(okLabel)}</button>
+        </div>
+      </div>`;
+    wrap.querySelector('.dialog-text').textContent = text;
+    document.body.appendChild(wrap);
+    const close = v => { wrap.remove(); document.removeEventListener('keydown', onKey); resolve(v); };
+    const onKey = e => { if(e.key === 'Escape') close(false); if(e.key === 'Enter') close(true); };
+    document.addEventListener('keydown', onKey);
+    wrap.querySelector('[data-no]').onclick = () => close(false);
+    wrap.querySelector('[data-yes]').onclick = () => close(true);
+    wrap.onclick = e => { if(e.target === wrap) close(false); };
+    wrap.querySelector('[data-yes]').focus();
+  });
 }
 
 // ---------- конструктор полей ----------
@@ -516,6 +557,9 @@ const PANEL_BRAND = () => ([
     F.area('profile.aboutText','Описание', { ph:'Пара слов о вас' }),
     F.links('profile.socialLinks','Ссылки в профиле', { sub:'Avito, ВК, канал, сайт — что угодно. Пустая ссылка не показывается.' }),
     F.sw('profile.showFavorites','Пункт «Избранное» в профиле'),
+    F.sel('profile.avatarHint','Как обозначить меню на аватарке',
+      [['caret','Стрелка вниз'],['dot','Точка'],['label','Подпись «Меню»'],['none','Ничего']],
+      { sub:'Аватарка в шапке открывает меню, но без подсказки это неочевидно — покупатели её просто не нажимают.' }),
   ]},
 ]);
 
@@ -883,12 +927,12 @@ function buildAdvanced(){
   $('importInput').onchange = async e => {
     const file = e.target.files[0];
     if(!file) return;
-    if(!confirm('Импорт заменит текущие настройки и список товаров. Продолжить?')) return;
+    if(!await confirmDialog('Импорт заменит текущие настройки и список товаров. Продолжить?', 'Импортировать')) return;
     try{
       await api('/api/admin/import', { method:'POST', body: await file.text() });
       toast('Импортировано');
       await init();
-    }catch(err){ alert('Не удалось импортировать: ' + err.message); }
+    }catch(err){ toast('Не удалось импортировать: ' + err.message, true); }
   };
 }
 
@@ -990,7 +1034,7 @@ ${o.customer.name || ''}${o.customer.phone ? ' · '+o.customer.phone : ''}${o.us
   ` : '<div class="empty">Заказов пока нет</div>';
   const btn = $('clearOrders');
   if(btn) btn.onclick = async () => {
-    if(!confirm('Удалить всю историю заказов?')) return;
+    if(!await confirmDialog('Удалить всю историю заказов? Отменить это будет нельзя.')) return;
     await api('/api/admin/orders', { method:'DELETE' });
     buildOrders();
   };
@@ -1024,6 +1068,9 @@ function buildProducts(){
       </div>
     </div>
     <div class="list-title">Каталог (${products.length})</div>
+    <div class="field" id="prodSearchBox" style="${products.length > 7 ? '' : 'display:none'}">
+      <input type="text" id="prodSearch" placeholder="Найти товар по названию или категории" autocomplete="off">
+    </div>
     <div class="list" id="list"></div>`;
 
   $('photoGrid') && renderPhotoGrid();
@@ -1031,6 +1078,8 @@ function buildProducts(){
   renderList();
   $('saveProductBtn').onclick = saveProduct;
   $('cancelEditBtn').onclick = resetProductForm;
+  const ps = $('prodSearch');
+  if(ps) ps.oninput = debounce(() => { productFilter = ps.value.trim().toLowerCase(); renderList(); }, 150);
 }
 
 function renderPhotoGrid(){
@@ -1101,7 +1150,7 @@ async function onPhotoSelected(e, slotIndex){
     ]);
     pendingImages[slotIndex] = fullRes.id;
     pendingThumbs[slotIndex] = thumbRes.id;
-  }catch(err){ alert('Не удалось загрузить фото: ' + err.message); }
+  }catch(err){ toast('Не удалось загрузить фото: ' + err.message, true); }
   renderPhotoGrid();
 }
 
@@ -1109,8 +1158,8 @@ async function saveProduct(){
   const val = id => $(id).value.trim();
   const name = val('pName');
   const price = Number(val('pPrice'));
-  if(!name) return alert('Укажите название');
-  if(!price && !settings.commerce.priceHidden) return alert('Укажите цену');
+  if(!name){ toast('Укажите название товара', true); $('pName').focus(); return; }
+  if(!price && !settings.commerce.priceHidden){ toast('Укажите цену', true); $('pPrice').focus(); return; }
 
   const payload = {
     name, price,
@@ -1131,7 +1180,7 @@ async function saveProduct(){
       products.push(await api('/api/admin/products', { method:'POST', body: JSON.stringify(payload) }));
       toast('Товар добавлен');
     }
-  }catch(e){ return alert('Ошибка: ' + e.message); }
+  }catch(e){ toast('Не удалось сохранить товар: ' + e.message, true); return; }
 
   resetProductForm();
   updateCategoryList();
@@ -1174,11 +1223,25 @@ function updateCategoryList(){
   if(dl) dl.innerHTML = cats.map(c => `<option value="${esc(c)}">`).join('');
 }
 
+let productFilter = '';
+
 function renderList(){
   const list = $('list');
   if(!list) return;
-  if(!products.length){ list.innerHTML = '<div class="empty">Товаров пока нет</div>'; return; }
-  list.innerHTML = products.map((p, i) => `
+  if(!products.length){ list.innerHTML = '<div class="empty">Товаров пока нет.<br>Добавьте первый в форме выше.</div>'; return; }
+
+  // Фильтр только показывает подмножество — порядок и стрелки перемещения
+  // по-прежнему считаются от полного списка, иначе «выше» двигало бы не туда.
+  const visible = productFilter
+    ? products.filter(p => (p.name + ' ' + (p.category || '')).toLowerCase().includes(productFilter))
+    : products;
+
+  if(!visible.length){
+    list.innerHTML = `<div class="empty">Ничего не найдено по запросу «${esc(productFilter)}»</div>`;
+    return;
+  }
+
+  list.innerHTML = visible.map(p => { const i = products.indexOf(p); return `
     <div class="row ${p.hidden ? 'hidden-prod' : ''}">
       <div class="thumb">${(p.thumbs && p.thumbs[0]) || (p.images && p.images[0])
         ? `<img src="/api/image?id=${encodeURIComponent((p.thumbs && p.thumbs[0]) || p.images[0])}">` : PLACEHOLDER_SVG}</div>
@@ -1194,14 +1257,15 @@ function renderList(){
         </div>
       </div>
       <div class="actions">
-        <button class="icon-toggle" data-id="${p.id}" data-act="up" title="Выше" ${i===0?'disabled':''}>↑</button>
-        <button class="icon-toggle ${p.featured ? 'on' : ''}" data-id="${p.id}" data-act="star" title="Хит">${STAR_SVG}</button>
+        <button class="icon-toggle" data-id="${p.id}" data-act="up" title="Поднять выше" ${i===0?'disabled':''}>↑</button>
+        <button class="icon-toggle" data-id="${p.id}" data-act="down" title="Опустить ниже" ${i===products.length-1?'disabled':''}>↓</button>
+        <button class="icon-toggle ${p.featured ? 'on' : ''}" data-id="${p.id}" data-act="star" title="Пометить как хит">${STAR_SVG}</button>
         <button class="icon-toggle" data-id="${p.id}" data-act="edit" title="Изменить">${EDIT_SVG}</button>
-        <button class="icon-toggle ${p.hidden ? 'on' : ''}" data-id="${p.id}" data-act="hide" title="Скрыть с витрины">${EYE_OFF_SVG}</button>
-        <button class="icon-toggle" data-id="${p.id}" data-act="publish" title="В канал" style="color:var(--accent-2)">${SEND_SVG}</button>
+        <button class="icon-toggle ${p.hidden ? 'on' : ''}" data-id="${p.id}" data-act="hide" title="${p.hidden ? 'Вернуть на витрину' : 'Убрать с витрины'}">${EYE_OFF_SVG}</button>
+        <button class="icon-toggle" data-id="${p.id}" data-act="publish" title="Опубликовать в канал" style="color:var(--accent-2)">${SEND_SVG}</button>
         <button class="icon-toggle" data-id="${p.id}" data-act="delete" title="Удалить" style="color:var(--danger)">${TRASH_SVG}</button>
       </div>
-    </div>`).join('');
+    </div>`; }).join('');
 
   const on = (act, fn) => list.querySelectorAll(`[data-act=${act}]`).forEach(el => el.onclick = () => fn(Number(el.dataset.id), el));
   on('stock', editStock);
@@ -1210,15 +1274,21 @@ function renderList(){
   on('edit',  editProduct);
   on('publish', publishProduct);
   on('delete', removeProduct);
-  on('up', moveUp);
+  on('up', id => moveProduct(id, -1));
+  on('down', id => moveProduct(id, +1));
 }
 
-async function moveUp(id){
+async function moveProduct(id, delta){
   const i = products.findIndex(p => p.id === id);
-  if(i <= 0) return;
-  [products[i-1], products[i]] = [products[i], products[i-1]];
+  const j = i + delta;
+  if(i === -1 || j < 0 || j >= products.length) return;
+  [products[i], products[j]] = [products[j], products[i]];
   renderList();
-  await api('/api/admin/reorder', { method:'POST', body: JSON.stringify({ ids: products.map(p=>p.id) }) });
+  try{
+    await api('/api/admin/reorder', { method:'POST', body: JSON.stringify({ ids: products.map(p=>p.id) }) });
+  }catch(e){
+    toast('Порядок не сохранился: ' + e.message, true);
+  }
 }
 
 async function patchProduct(id, patch){
@@ -1226,7 +1296,7 @@ async function patchProduct(id, patch){
   Object.assign(p, patch);
   renderList();
   try{ await api('/api/admin/products', { method:'PUT', body: JSON.stringify({ id, ...patch }) }); }
-  catch(e){ alert('Не сохранилось: ' + e.message); }
+  catch(e){ toast('Не сохранилось: ' + e.message, true); }
 }
 
 async function publishProduct(id, btn){
@@ -1238,7 +1308,7 @@ async function publishProduct(id, btn){
     btn.innerHTML = '✓';
     setTimeout(() => { btn.innerHTML = original; btn.disabled = false; }, 1400);
     return;
-  }catch(e){ alert('Не удалось опубликовать: ' + e.message); }
+  }catch(e){ toast('Не удалось опубликовать: ' + e.message, true); }
   btn.innerHTML = original;
   btn.disabled = false;
 }
@@ -1260,7 +1330,7 @@ function editStock(id){
 }
 
 async function removeProduct(id){
-  if(!confirm('Удалить товар? Фотографии тоже будут стёрты с сервера.')) return;
+  if(!await confirmDialog('Удалить товар? Фотографии тоже будут стёрты с сервера.')) return;
   await api('/api/admin/products?id=' + id, { method:'DELETE' });
   products = products.filter(x => x.id !== id);
   updateCategoryList();
@@ -1277,7 +1347,7 @@ async function saveSettings(){
     $('saveStatus').textContent = 'Сохранено ✓';
     setTimeout(() => { $('savebar').classList.remove('show'); }, 1200);
     applyTheme(settings.theme);
-  }catch(e){ alert('Не удалось сохранить: ' + e.message); }
+  }catch(e){ toast('Не удалось сохранить: ' + e.message, true); }
   btn.disabled = false;
 }
 
@@ -1294,7 +1364,7 @@ async function onLogoSelected(e){
     preview.innerHTML = `<img src="${thumb}">`;
     refreshPreview();
   }catch(err){
-    alert('Не удалось загрузить логотип: ' + err.message);
+    toast('Не удалось загрузить логотип: ' + err.message, true);
     preview.innerHTML = PLACEHOLDER_SVG;
   }
 }

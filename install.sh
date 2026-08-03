@@ -28,14 +28,28 @@ fi
 say "Node $(node -v)"
 
 # ---------- параметры ----------
+# Если магазин уже стоит, подставляем прежние значения как ответы по умолчанию:
+# повторный запуск не должен молча выдать новый пароль админки или стереть токен.
+OLD_BOT_TOKEN=""; OLD_ADMIN_TOKEN=""; OLD_PORT=""; OLD_DOMAIN=""
+if [ -f "$APP_DIR/.env" ]; then
+  # shellcheck disable=SC1090
+  OLD_BOT_TOKEN="$(grep -E '^BOT_TOKEN=' "$APP_DIR/.env" | cut -d= -f2- || true)"
+  OLD_ADMIN_TOKEN="$(grep -E '^ADMIN_TOKEN=' "$APP_DIR/.env" | cut -d= -f2- || true)"
+  OLD_PORT="$(grep -E '^PORT=' "$APP_DIR/.env" | cut -d= -f2- || true)"
+  OLD_DOMAIN="$(grep -E '^PUBLIC_URL=' "$APP_DIR/.env" | sed -E 's|^PUBLIC_URL=https?://||; s|:[0-9]+$||' || true)"
+  echo
+  warn "Найдена прежняя установка — текущие настройки подставлены как значения по умолчанию."
+  warn "Если нужно просто обновить код, не меняя ничего: bash update.sh"
+fi
+
 echo
 echo "──────────── Настройка ────────────"
-BOT_TOKEN="$(ask 'Токен бота от @BotFather')"
+BOT_TOKEN="$(ask 'Токен бота от @BotFather' "$OLD_BOT_TOKEN")"
 [ -n "$BOT_TOKEN" ] || die "Без токена бот и уведомления работать не будут"
-DOMAIN="$(ask 'Домен (например shop.example.com), пусто = только по IP')"
-ADMIN_TOKEN="$(ask 'Пароль в админку (Enter — сгенерирую)')"
+DOMAIN="$(ask 'Домен (например shop.example.com), пусто = только по IP' "$OLD_DOMAIN")"
+ADMIN_TOKEN="$(ask 'Пароль в админку (Enter — оставить прежний или сгенерировать)' "$OLD_ADMIN_TOKEN")"
 [ -n "$ADMIN_TOKEN" ] || ADMIN_TOKEN="$(head -c 24 /dev/urandom | base64 | tr -d '/+=' | head -c 24)"
-PORT="$(ask 'Внутренний порт' '3000')"
+PORT="$(ask 'Внутренний порт' "${OLD_PORT:-3000}")"
 
 # ---------- файлы ----------
 say "Копирую в ${APP_DIR}"

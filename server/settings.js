@@ -139,6 +139,8 @@ const DEFAULTS = {
     socialLinks: [],        // [{label, url}]
     showFavorites: true,
     aboutText: '',
+    // как показать, что аватарка в шапке — это меню: caret | dot | label | none
+    avatarHint: 'caret',
   },
 
   // --- прочее ---
@@ -303,6 +305,7 @@ function sanitize(input) {
         .filter(l => l.url),
       showFavorites: bool(pr.showFavorites, true),
       aboutText: str(pr.aboutText, '', 500),
+      avatarHint: oneOf(pr.avatarHint, ['caret', 'dot', 'label', 'none'], 'caret'),
     },
     advanced: {
       locale: str(ad.locale, 'ru-RU', 12),
