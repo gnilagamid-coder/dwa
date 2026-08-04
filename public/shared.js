@@ -23,6 +23,7 @@ function applyTheme(theme, rootEl) {
   set('--bg', r.bg); set('--surface', r.surface); set('--surface-2', r.surface2);
   set('--text', r.text); set('--muted', r.muted);
   set('--accent', r.accent); set('--accent-2', r.accent2); set('--heart', r.accent);
+  set('--on-accent', contrastOnColor(el, r.accent));
   set('--radius', r.radius + 'px');
   set('--bw', r.borderWidth + 'px');
   set('--font-display', FONT_STACKS[r.fontDisplay] || FONT_STACKS.system);
@@ -31,6 +32,23 @@ function applyTheme(theme, rootEl) {
   set('--caps', r.uppercase ? 'uppercase' : 'none');
   loadFont(r.fontDisplay);
   return r;
+}
+
+// Контрастный цвет текста для акцентного фона. Hex считаем математикой
+// (onAccentColor из theme-core), а если продавец вписал rgb() или название
+// цвета — спрашиваем браузер, подставив цвет во временный элемент.
+function contrastOnColor(el, color) {
+  const hex = onAccentColor(color);
+  if (hex) return hex;
+  const d = el.ownerDocument || document;
+  const t = d.createElement('i');
+  t.style.cssText = 'position:absolute;visibility:hidden;color:' + color;
+  el.appendChild(t);
+  const rgb = (getComputedStyle(t).color.match(/[\d.]+/g) || [0, 0, 0]).map(Number);
+  t.remove();
+  const lin = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+  const L = 0.2126 * lin(rgb[0]) + 0.7152 * lin(rgb[1]) + 0.0722 * lin(rgb[2]);
+  return L > 0.45 ? '#000000' : '#ffffff';
 }
 
 // Подгружаем только выбранный шрифт, а не все восемь сразу.

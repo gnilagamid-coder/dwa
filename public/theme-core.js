@@ -109,6 +109,24 @@ const FONT_STACKS = {
 
 const DENSITY = { compact: 0.8, normal: 1, roomy: 1.25 };
 
+// Цвет текста, гарантированно читаемый НА акцентном фоне. Акцент продавец
+// выбирает свободно, а в пресетах вроде ERD акцент — белый: кнопки с фоном
+// var(--accent) и «общим» цветом текста становились невидимыми (белое на
+// белом) и выглядели пустыми плашками. Считаем по относительной яркости
+// (формула WCAG): порог 0.45 — эмпирическая середина, жёлтый акцент уже
+// получает чёрный текст, красный — белый.
+function onAccentColor(color) {
+  let c = String(color || '').trim();
+  if (/^#[0-9a-f]{3}$/i.test(c)) c = '#' + [...c.slice(1)].map(x => x + x).join('');
+  const m = /^#([0-9a-f]{6})$/i.exec(c);
+  if (!m) return '';
+  const lin = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+  const L = 0.2126 * lin(parseInt(m[1].slice(0, 2), 16)) +
+            0.7152 * lin(parseInt(m[1].slice(2, 4), 16)) +
+            0.0722 * lin(parseInt(m[1].slice(4, 6), 16));
+  return L > 0.45 ? '#000000' : '#ffffff';
+}
+
 // Собирает итоговую палитру: пресет как база, ручные поля из настроек — сверху.
 function resolveTheme(theme) {
   const t = theme || {};
@@ -128,5 +146,5 @@ function resolveTheme(theme) {
 }
 
 
-return { THEME_PRESETS, LOGO_MARKS, FONT_STACKS, DENSITY, resolveTheme, logoMarkSVG };
+return { THEME_PRESETS, LOGO_MARKS, FONT_STACKS, DENSITY, resolveTheme, logoMarkSVG, onAccentColor };
 }));

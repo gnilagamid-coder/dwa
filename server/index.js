@@ -26,7 +26,7 @@ const { sanitize } = require('./settings');
 const { tgApi, validateInitData, esc, BOT_TOKEN, API_BASE } = require('./telegram');
 const bot = require('./bot');
 const payments = require('./payments');
-const { resolveTheme } = require('../public/theme-core.js');
+const { resolveTheme, onAccentColor } = require('../public/theme-core.js');
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '127.0.0.1';
@@ -203,6 +203,7 @@ function bootThemeCSS(s) {
     `--bg:${r.bg}`, `--surface:${r.surface}`, `--surface-2:${r.surface2}`,
     `--text:${r.text}`, `--muted:${r.muted}`, `--accent:${r.accent}`,
     `--accent-2:${r.accent2}`, `--heart:${r.accent}`,
+    `--on-accent:${onAccentColor(r.accent) || '#ffffff'}`,
     `--radius:${r.radius}px`, `--bw:${r.borderWidth}px`,
     `--fs:${(r.fontScale / 100).toFixed(2)}`,
     `--gap:${(DENSITY_SRV[r.density] || 1).toFixed(2)}`,
