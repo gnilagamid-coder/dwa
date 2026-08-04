@@ -463,8 +463,12 @@
     .overlay.open .sheet{transform:none;opacity:1}
     .sheet-scroll{max-height:min(76vh,720px)}
     .sheet-close{top:14px;right:14px}
-    /* поле поиска во всю ширину колонки на десктопе смотрится нелепо */
-    .search{max-width:520px}
+    /* Поиск переезжает в строку шапки (перенос делает JS, см. placeSearch).
+       Раньше шапка на десктопе была почти пустой: логотип слева, две иконки
+       у правого края и 900px воздуха между ними, а поиск отдельной строкой
+       растягивался на всю колонку. */
+    header .search{margin:0 20px;flex:1 1 auto;max-width:480px}
+    .logo{flex:0 0 auto}
     /* курсор на десктопе есть — показываем отклик на наведение */
     .card{transition:transform .12s,border-color .12s}
     .card:hover{border-color:var(--accent)}
@@ -777,6 +781,26 @@ function getFilteredProducts(){
   if(sortMode === 'name') list = [...list].sort((a,b)=>a.name.localeCompare(b.name));
   return list;
 }
+
+// На десктопе поиск живёт в строке шапки, на телефоне — отдельной строкой под
+// ней. Переносим сам узел, а не дублируем разметку: обработчики, значение поля
+// и состояние крестика остаются теми же, перерисовывать ничего не нужно.
+const mqWide = window.matchMedia('(min-width:900px)');
+function placeSearch(){
+  const box = document.getElementById('searchBox');
+  const header = document.getElementById('appHeader');
+  const icons = header.querySelector('.header-icons');
+  if(mqWide.matches){
+    if(box.parentElement !== header) header.insertBefore(box, icons);
+  } else if(box.parentElement === header){
+    // Возвращаем на исходное место — прямо перед блоком категорий. Привязка
+    // к нему, а не к шапке: между ними ещё подзаголовок и бегущая строка,
+    // и вставка «после шапки» ломала бы их порядок.
+    document.getElementById('categoriesSection').before(box);
+  }
+}
+placeSearch();
+mqWide.addEventListener('change', placeSearch);
 
 const searchInput = document.getElementById('searchInput');
 const searchClear = document.getElementById('searchClear');
@@ -1728,6 +1752,12 @@ document.querySelectorAll('.overlay').forEach(ov=>{
 document.querySelectorAll('[data-close]').forEach(btn=>{
   btn.onclick = () => { haptic.tap(); closeSheet(btn.closest('.overlay').id); };
 });
+// На десктопе Esc закрывает верхнюю шторку — этого ждут по привычке, а на
+// телефоне ту же роль играет нативная BackButton Telegram.
+document.addEventListener('keydown', e => {
+  if(e.key === 'Escape' && sheetStack.length){ e.preventDefault(); closeTopSheet(); }
+});
+
 document.getElementById('lightboxClose').onclick = closeLightbox;
 document.getElementById('lightbox').addEventListener('click', e => {
   if(e.target.id !== 'lightboxImg') closeLightbox();
