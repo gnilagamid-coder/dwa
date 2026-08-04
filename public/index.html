@@ -378,6 +378,18 @@
     font-family:inherit;font-size:calc(13px * var(--fs));line-height:1.55;color:var(--text);
     white-space:pre-wrap;word-break:break-word;max-height:220px;overflow-y:auto;
   }
+  /* экран возврата из платёжного сервиса */
+  .pay-return{position:fixed;inset:0;z-index:70;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:24px}
+  .pay-card{max-width:380px;width:100%;text-align:center;background:var(--surface);border-radius:var(--radius);
+    border:var(--bw) solid var(--surface-2);border-top:calc(var(--bw) * 3) solid var(--accent);padding:32px 24px}
+  .pay-card.bad{border-top-color:var(--muted)}
+  .pay-icon{width:56px;height:56px;margin:0 auto 16px;border-radius:50%;display:flex;align-items:center;
+    justify-content:center;font-size:28px;background:var(--accent);color:var(--bg)}
+  .pay-card.bad .pay-icon{background:var(--surface-2);color:var(--muted)}
+  .pay-title{font-family:var(--font-display);font-size:calc(20px * var(--fs));text-transform:var(--caps);margin-bottom:10px}
+  .pay-text{font-size:calc(14px * var(--fs));color:var(--muted);line-height:1.55;margin-bottom:12px;white-space:pre-line}
+  .pay-order{font-size:calc(12px * var(--fs));color:var(--muted);opacity:.7;margin-bottom:20px}
+
   /* промокод */
   .promo-row{display:flex;gap:8px}
   .promo-row input{flex:1;text-transform:uppercase}
@@ -1933,6 +1945,41 @@ if(IS_PREVIEW){
   // через секунду берём настройки с сервера, чтобы не остаться пустыми
   setTimeout(() => { if(!settings) loadSettings().then(renderGrid); }, 1000);
 }
+
+// Возврат из платёжного сервиса. Мерчант присылает покупателя на /?paid=<id>
+// или /?failed=<id>; без обработки человек попадал просто в каталог и не
+// понимал, прошла оплата или нет. Открывается это обычно во встроенном
+// браузере Telegram, где мини-апп-API недоступно, поэтому обходимся своей
+// разметкой и не дёргаем SDK.
+(function handlePaymentReturn(){
+  const q = new URLSearchParams(location.search);
+  const paid = q.get('paid'), failed = q.get('failed');
+  if(!paid && !failed) return;
+
+  const show = () => {
+    const ok = !!paid;
+    const box = document.createElement('div');
+    box.className = 'pay-return';
+    box.innerHTML = `
+      <div class="pay-card ${ok ? 'ok' : 'bad'}">
+        <div class="pay-icon">${ok ? '✓' : '!'}</div>
+        <div class="pay-title">${ok ? 'Оплата получена' : 'Оплата не прошла'}</div>
+        <div class="pay-text">${ok
+          ? esc((settings && settings.payments && settings.payments.successText) || 'Спасибо! Заказ оплачен.')
+          : 'Деньги не списаны. Можно попробовать ещё раз или написать менеджеру.'}</div>
+        <div class="pay-order">Заказ №${esc(paid || failed)}</div>
+        <button class="checkout-btn" id="payBackBtn">Вернуться в магазин</button>
+      </div>`;
+    document.body.appendChild(box);
+    document.getElementById('payBackBtn').onclick = () => {
+      box.remove();
+      // чистим адрес, чтобы обновление страницы не показывало экран снова
+      history.replaceState(null, '', location.pathname);
+    };
+  };
+  // ждём настройки ради текста и темы, но не дольше секунды
+  if(settings) show(); else setTimeout(show, 900);
+})();
 
 // порядок важен: сперва тема (иначе увидим вспышку дефолтной), потом товары
 renderSkeletons();

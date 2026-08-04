@@ -51,7 +51,16 @@ const MIME = {
 
 function json(res, code, data) {
   const body = JSON.stringify(data);
-  res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': Buffer.byteLength(body) });
+  res.writeHead(code, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Content-Length': Buffer.byteLength(body),
+    // Без явного заголовка ответ без даты и валидатора можно кэшировать
+    // «эвристически» — так делают и браузеры, и промежуточные прокси, и особенно
+    // охотно вебвью Telegram. В результате продавец менял настройки, а клиент
+    // продолжал получать старый /api/settings. Данные магазина живые, кэшировать
+    // их нельзя вообще.
+    'Cache-Control': 'no-store',
+  });
   res.end(body);
 }
 
@@ -95,6 +104,20 @@ function rateLimit(ip, max, windowMs) {
 setInterval(() => { const now = Date.now(); for (const [k, v] of hits) if (now - v.start > 600000) hits.delete(k); }, 600000).unref();
 
 function getSettings() { return sanitize(store.read('settings', {})); }
+
+// Короткий отпечаток текущих настроек — им помечается отдаваемый index.html,
+// чтобы кэш клиента протухал ровно тогда, когда продавец что-то поменял.
+// Считается по «сырым» настройкам из хранилища: они лежат в памяти, так что
+// это просто хэш небольшой строки на каждый запрос страницы.
+let fpCacheSrc = null, fpCacheVal = '0';
+function settingsFingerprint() {
+  const src = JSON.stringify(store.read('settings', {}));
+  if (src !== fpCacheSrc) {
+    fpCacheSrc = src;
+    fpCacheVal = crypto.createHash('sha1').update(src).digest('hex').slice(0, 10);
+  }
+  return fpCacheVal;
+}
 
 // На витрину не отдаём то, что клиенту знать незачем. Особенно creds платёжного
 // мерчанта: /api/settings открыт всем без авторизации, и утечь секрет там нельзя.
@@ -213,20 +236,31 @@ async function serveStatic(req, res, urlPath) {
       ? 'no-cache'
       : 'public, max-age=31536000, immutable'; // картинки лежат под уникальными именами
     // ETag из размера и времени изменения: при no-cache браузер пришлёт
-    // If-None-Match, и мы ответим 304 вместо повторной отдачи файла
-    const etag = `W/"${stat.size.toString(16)}-${stat.mtimeMs.toString(36)}"`;
+    // If-None-Match, и мы ответим 304 вместо повторной отдачи файла.
+    //
+    // Для index.html этого МАЛО. В него подставляется тема, а сам файл при смене
+    // настроек не меняется — размер и mtime те же. Из-за этого продавец менял
+    // оформление, а у покупателей оно не появлялось: их браузер слал
+    // If-None-Match, получал 304 и продолжал показывать старую тему, пока не
+    // почистит кэш. Поэтому подмешиваем в ETag отпечаток настроек: файл прежний,
+    // но настройки другие — значит, ответ считается изменившимся.
+    let etag = `W/"${stat.size.toString(16)}-${stat.mtimeMs.toString(36)}"`;
+    const isIndex = rel === '/index.html';
+    if (isIndex) etag = `W/"${stat.size.toString(16)}-${stat.mtimeMs.toString(36)}-${settingsFingerprint()}"`;
+
     if (req.headers['if-none-match'] === etag) {
       res.writeHead(304, { ETag: etag, 'Cache-Control': cacheControl });
       return res.end();
     }
+
     // index.html отдаём с уже подставленной темой — единственный файл, который
     // мы модифицируем на лету, поэтому он не стримится, а собирается в памяти
     // (70 КБ, это ничего не стоит).
-    if (rel === '/index.html') {
+    if (isIndex) {
       let html = await fsp.readFile(full, 'utf8');
       html = html.replace('</head>', bootThemeCSS(getSettings()) + '</head>');
       const buf = Buffer.from(html, 'utf8');
-      const h = { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-cache' };
+      const h = { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-cache', ETag: etag };
       if (/\bgzip\b/.test(req.headers['accept-encoding'] || '')) {
         h['Content-Encoding'] = 'gzip'; h['Vary'] = 'Accept-Encoding';
         const gz = zlib.gzipSync(buf, { level: 6 });
