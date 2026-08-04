@@ -493,11 +493,17 @@ async function handleApi(req, res, url) {
     }
     // копия покупателю в чат с ботом
     if (s.bot.notifyCustomer && tgUser) {
-      await tgApi('sendMessage', {
+      const payload = {
         chat_id: tgUser.id,
         text: bot.fill(s.bot.customerReceiptText, { order: built.text.replace(/<[^>]+>/g, ''), name: esc(tgUser.first_name || '') }),
         parse_mode: 'HTML',
-      }).catch(() => {});
+      };
+      // Кнопка открытия магазина в чеке — строго web_app (приватный чат,
+      // значит условие Bot API соблюдено). url-кнопка здесь и была причиной
+      // «магазин открывается огромным окном браузера» без обвязки Mini App.
+      const appUrl = bot.shopWebAppUrl(s);
+      if (appUrl) payload.reply_markup = { inline_keyboard: [[{ text: s.bot.buttonText, web_app: { url: appUrl } }]] };
+      await tgApi('sendMessage', payload).catch(() => {});
     }
 
     return json(res, 200, { ok: true, orderId: order.id, orderText: built.text.replace(/<[^>]+>/g, '') });
@@ -708,6 +714,15 @@ async function handleApi(req, res, url) {
       add('publicUrl', 'PUBLIC_URL настроен', /^https:\/\//i.test(process.env.PUBLIC_URL || ''),
         process.env.PUBLIC_URL || 'не задан',
         'Без https-адреса Telegram не откроет мини-апп и не отдаст фото при публикации в канал');
+
+      // Отдельная проверка кнопки «Открыть»: web_app-кнопки и кнопка меню
+      // требуют https (t.me-ссылка или домен, привязанный к боту в BotFather).
+      const appUrl = bot.shopWebAppUrl(s);
+      const isTme = /^https:\/\/(t\.me|telegram\.me)\//i.test(appUrl);
+      add('webapp', 'Ссылка мини-аппа для кнопок web_app', !!appUrl,
+        appUrl || 'нет ни t.me-ссылки в разделе «Канал», ни https в PUBLIC_URL',
+        'Лучший вариант — ссылка вида t.me/бот/app из @BotFather (/newapp), её впишите в «Канал» → ссылка мини-аппа. ' +
+        (isTme ? '' : 'Для прямого https-домена также привяжите его к боту: @BotFather → /setdomain. '));
 
       add('notify', 'Указан получатель уведомлений', s.notify.chatIds.length > 0,
         s.notify.chatIds.length ? `получателей: ${s.notify.chatIds.length}` : 'список пуст',

@@ -15,6 +15,10 @@
   :root{
     --bg:#0d0d0d; --surface:#161616; --surface-2:#202020;
     --text:#f2efe6; --muted:#8a8880; --accent:#e8341c; --accent-2:#f2c94c; --danger:#e8341c;
+    /* Текст НА акцентном фоне. Раньше кнопки брали color:var(--text), и на
+       светлом акценте (например белом у пресета ERD) получалось белое по
+       белому — те самые «белые кнопки». */
+    --on-accent:#ffffff;
     --font-display:'Oswald',sans-serif;
   }
   *{box-sizing:border-box;margin:0;padding:0}
@@ -25,7 +29,7 @@
   textarea{resize:vertical;min-height:70px;font-size:14px;line-height:1.5}
   input[type=color]{padding:2px;height:38px;cursor:pointer}
   input[type=range]{padding:0;accent-color:var(--accent)}
-  button{background:var(--accent);color:var(--text);border:none;padding:11px 16px;font-family:var(--font-display);letter-spacing:.4px;text-transform:uppercase;font-weight:600;cursor:pointer;transition:opacity .15s}
+  button{background:var(--accent);color:var(--on-accent);border:none;padding:11px 16px;font-family:var(--font-display);letter-spacing:.4px;text-transform:uppercase;font-weight:600;cursor:pointer;transition:opacity .15s}
   button:active{opacity:.75}
   button.secondary{background:var(--surface-2);color:var(--text)}
   button.ghost{background:transparent;border:1px solid var(--surface-2);color:var(--muted)}
@@ -45,7 +49,7 @@
   .tabs{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:10px}
   .tabs::-webkit-scrollbar{display:none}
   .tab{flex-shrink:0;padding:9px 13px;background:var(--surface);border:1px solid var(--surface-2);font-family:var(--font-display);font-size:12px;letter-spacing:.4px;text-transform:uppercase;color:var(--muted);cursor:pointer;white-space:nowrap}
-  .tab.active{background:var(--accent);border-color:var(--accent);color:var(--bg)}
+  .tab.active{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
 
   .panel{display:none}
   .panel.active{display:block}
@@ -67,7 +71,7 @@
   .switch-track{width:44px;height:26px;background:var(--surface-2);border:1px solid var(--muted);position:relative;cursor:pointer;flex-shrink:0;transition:background .15s}
   .switch-track.on{background:var(--accent);border-color:var(--accent)}
   .switch-thumb{width:18px;height:18px;background:var(--text);position:absolute;top:3px;left:3px;transition:transform .15s}
-  .switch-track.on .switch-thumb{transform:translateX(18px);background:var(--bg)}
+  .switch-track.on .switch-thumb{transform:translateX(18px);background:var(--on-accent)}
 
   .promo-item{background:var(--surface-2);padding:12px;margin-bottom:10px;border-left:3px solid var(--accent)}
   .promo-item.off{opacity:.5;border-left-color:var(--muted)}
@@ -114,7 +118,7 @@
   .photo-slot img{width:100%;height:100%;object-fit:cover}
   .photo-slot input{display:none}
   .photo-slot .photo-remove{position:absolute;top:3px;right:3px;width:22px;height:22px;background:rgba(0,0,0,.65);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px}
-  .photo-slot .photo-main-tag{position:absolute;bottom:0;left:0;right:0;background:var(--accent);color:var(--text);font-size:9px;font-weight:700;text-align:center;text-transform:uppercase;padding:2px 0}
+  .photo-slot .photo-main-tag{position:absolute;bottom:0;left:0;right:0;background:var(--accent);color:var(--on-accent);font-size:9px;font-weight:700;text-align:center;text-transform:uppercase;padding:2px 0}
 
   .list{display:flex;flex-direction:column;gap:8px}
   .list-title{font-family:var(--font-display);font-size:15px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;margin:20px 0 10px}
@@ -131,7 +135,7 @@
   .row .actions button:disabled{opacity:.25}
   .row button.icon-toggle{padding:0;width:32px;height:32px;display:flex;align-items:center;justify-content:center;background:var(--surface-2)}
   .row button.icon-toggle svg{width:14px;height:14px}
-  .row button.icon-toggle.on{background:var(--accent);color:var(--bg)}
+  .row button.icon-toggle.on{background:var(--accent);color:var(--on-accent)}
   .views-count{display:flex;align-items:center;gap:3px;font-size:11px;color:var(--muted)}
   .views-count svg{width:12px;height:12px}
 
@@ -145,6 +149,9 @@
   .order pre{white-space:pre-wrap;font-family:inherit;font-size:12.5px;line-height:1.5}
 
   .empty{color:var(--muted);text-align:center;padding:26px 0;font-size:13px}
+
+  /* выбор темы самой админки — те же карточки-пресеты, что у витрины */
+  .preset .swatches.on-accent i:last-child{outline:1px solid var(--muted);outline-offset:-1px}
 
   /* Десктоп. Раньше админка оставалась колонкой 620px на любом мониторе:
      на 1600px две трети экрана пустовали, а 14 вкладок (больше 1000px) не
@@ -277,6 +284,42 @@ let orders = [];
 let dirty = false;
 
 const $ = id => document.getElementById(id);
+
+// ---------- темы самой админки ----------
+// Админка — интерфейс продавца, а не покупателя, поэтому у неё СОБСТВЕННЫЕ
+// темы, не зависящие от палитры витрины. Раньше applyTheme(settings.theme)
+// перекрашивала админку темой магазина: стоило выбрать светлый пресет
+// (например market), и админка становилась белой — это и была «тема снова
+// светлая». Витрина при этом остаётся в живом превью справа.
+const ADMIN_THEMES = {
+  graphite: { label:'Графит', vars:{
+    '--bg':'#0d0d0d','--surface':'#161616','--surface-2':'#202020','--text':'#f2efe6','--muted':'#8a8880',
+    '--accent':'#e8341c','--accent-2':'#f2c94c','--danger':'#e8341c','--on-accent':'#ffffff' }},
+  light: { label:'Светлая', vars:{
+    '--bg':'#f4f3ef','--surface':'#ffffff','--surface-2':'#e7e5dd','--text':'#1c1b17','--muted':'#6d6a60',
+    '--accent':'#c53016','--accent-2':'#0f6bb0','--danger':'#c53016','--on-accent':'#ffffff' }},
+  ocean: { label:'Океан', vars:{
+    '--bg':'#0b1220','--surface':'#131c2e','--surface-2':'#1d2a42','--text':'#e9eef7','--muted':'#90a2bf',
+    '--accent':'#2f80ed','--accent-2':'#56c2ff','--danger':'#ff6b5e','--on-accent':'#ffffff' }},
+  contrast: { label:'Контраст', vars:{
+    '--bg':'#000000','--surface':'#101010','--surface-2':'#222222','--text':'#ffffff','--muted':'#cfcfcf',
+    '--accent':'#ffd60a','--accent-2':'#7ef2ff','--danger':'#ff5d5d','--on-accent':'#000000' }},
+};
+const LS_ADMIN_THEME = 'admin_theme_v1';
+function getAdminTheme(){
+  try{ const v = localStorage.getItem(LS_ADMIN_THEME); return ADMIN_THEMES[v] ? v : 'graphite'; }
+  catch(e){ return 'graphite'; }
+}
+function applyAdminTheme(name, persist = true){
+  const t = ADMIN_THEMES[name] || ADMIN_THEMES.graphite;
+  const st = document.documentElement.style;
+  Object.entries(t.vars).forEach(([k, v]) => st.setProperty(k, v));
+  st.colorScheme = name === 'light' ? 'light' : 'dark';
+  if(persist) try{ localStorage.setItem(LS_ADMIN_THEME, name); }catch(e){}
+}
+// применяем до логина, чтобы экран входа сразу был в выбранной теме
+try{ applyAdminTheme(localStorage.getItem(LS_ADMIN_THEME) || 'graphite', false); }
+catch(e){ applyAdminTheme('graphite', false); }
 
 // ---------- доступ к настройкам по пути 'theme.accent' ----------
 function getPath(obj, path){ return path.split('.').reduce((o,k)=> (o==null?o:o[k]), obj); }
@@ -448,9 +491,11 @@ function bindPanel(root){
   });
 }
 
-// смена темы должна сразу отражаться на самой админке — это и есть живое превью
+// смена темы должна сразу отражаться в живом превью витрины. САМА админка
+// темой магазина больше не перекрашивается — у неё собственные темы (см.
+// ADMIN_THEMES), иначе светлый пресет витрины делал админку нечитаемой.
 function afterChange(path){
-  if(path.startsWith('theme.')){ applyTheme(settings.theme); refreshPreview(); }
+  if(path.startsWith('theme.')) refreshPreview();
   if(path === 'theme.colorScheme'){
     const sw = $('schemeWarn');
     if(sw) sw.style.display = settings.theme.colorScheme === 'telegram' ? '' : 'none';
@@ -638,7 +683,7 @@ function buildTheme(){
       <div class="hint">Пресет задаёт палитру, шрифт, рамки и скругления разом. Дальше можно подкрутить любой параметр вручную.</div>
       <div class="presets" id="presetGrid">${presetCards}</div>
     </div>
-    ${renderCard({ title:'Цвета', hint:'Пустое поле = берётся из пресета. Меняется прямо здесь — админка перекрашивается сразу.', fields:[
+    ${renderCard({ title:'Цвета', hint:'Пустое поле = берётся из пресета. Витрина перекрашивается сразу — следите за превью.', fields:[
       F.color('theme.bg','Фон', { fallback:'#0d0d0d' }),
       F.color('theme.surface','Поверхность', { fallback:'#161616' }),
       F.color('theme.surface2','Поверхность 2', { fallback:'#202020' }),
@@ -693,7 +738,6 @@ function buildTheme(){
       radius: p.radius, borderWidth: p.borderWidth, fontDisplay: p.fontDisplay, uppercase: p.uppercase,
     });
     markDirty();
-    applyTheme(settings.theme);
     buildTheme();
   });
   refreshPreview();
@@ -1034,7 +1078,21 @@ const PANEL_CHANNEL = () => ([
 
 // ---------- Ещё ----------
 function buildAdvanced(){
+  const themeCards = Object.entries(ADMIN_THEMES).map(([key, t]) => {
+    const v = t.vars;
+    return `<div class="preset ${getAdminTheme()===key?'active':''}" data-admin-theme="${key}">
+      <div class="swatches"><i style="background:${v['--bg']}"></i><i style="background:${v['--surface-2']}"></i><i style="background:${v['--accent']}"></i><i style="background:${v['--accent-2']}"></i></div>
+      <span>${t.label}</span>
+    </div>`;
+  }).join('');
+
   $('panel-advanced').innerHTML = `
+    <div class="card">
+      <h2>Внешний вид админки</h2>
+      <div class="hint">Тема самой админ-панели. Хранится в этом браузере и не влияет на витрину —
+        покупатели всегда видят только оформление магазина. Применяется мгновенно, сохранять не нужно.</div>
+      <div class="presets" id="adminThemeGrid">${themeCards}</div>
+    </div>
     ${renderCard({ title:'Режим обслуживания', hint:'Витрина закрывается для всех, каталог не показывается. Админка продолжает работать.', fields:[
       F.sw('advanced.maintenanceMode','Закрыть магазин'),
       F.area('advanced.maintenanceText','Что написать посетителям'),
@@ -1052,6 +1110,10 @@ function buildAdvanced(){
       </div>
     </div>`;
   bindPanel($('panel-advanced'));
+  $('adminThemeGrid').querySelectorAll('[data-admin-theme]').forEach(el => el.onclick = () => {
+    applyAdminTheme(el.dataset.adminTheme);
+    buildAdvanced(); // перерисовать, чтобы подсветить выбранную карточку
+  });
   $('exportBtn').onclick = async () => {
     const data = await api('/api/admin/export');
     const blob = new Blob([JSON.stringify(data, null, 2)], { type:'application/json' });
@@ -1482,7 +1544,6 @@ async function saveSettings(){
     dirty = false;
     $('saveStatus').textContent = 'Сохранено ✓';
     setTimeout(() => { $('savebar').classList.remove('show'); }, 1200);
-    applyTheme(settings.theme);
   }catch(e){ toast('Не удалось сохранить: ' + e.message, true); }
   btn.disabled = false;
 }
@@ -1525,7 +1586,8 @@ async function init(){
   $('botStatus').textContent = stats.botConnected ? 'бот подключён' : 'бот не подключён';
   $('botStatus').style.color = stats.botConnected ? 'var(--accent-2)' : 'var(--danger)';
 
-  applyTheme(settings.theme);
+  // тему витрины здесь НЕ применяем: за неё отвечает живое превью, а админка
+  // рисуется собственной темой (applyAdminTheme при загрузке страницы)
   setCurrency({ symbol: settings.commerce.currency, position: settings.commerce.currencyPosition, locale: settings.advanced.locale });
 
   renderTabs();

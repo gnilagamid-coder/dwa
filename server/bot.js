@@ -17,12 +17,29 @@ function fill(tpl, vars) {
   return String(tpl || '').replace(/\{(\w+)\}/g, (m, k) => (vars[k] !== undefined ? vars[k] : m));
 }
 
-function menuKeyboard(s) {
+// URL для открытия мини-аппа кнопками web_app и menu button.
+// Приоритет: ссылка вида t.me/bot/app (это уже готовая ссылка Mini App,
+// Telegram открывает её нативно), затем https-адрес PUBLIC_URL из .env.
+// Важно по Bot API: web_app принимает только https, а для «чужих» доменов
+// домен должен быть привязан к боту в @BotFather (/setdomain), иначе клиент
+// откатится на открытие в браузере. t.me-ссылка от этого не страдает.
+function shopWebAppUrl(s) {
+  const link = String(s.channel.miniAppLink || '').trim();
+  if (/^https:\/\/(t\.me|telegram\.me)\//i.test(link)) return link;
+  const pub = String(process.env.PUBLIC_URL || '').trim().replace(/\/$/, '');
+  if (/^https:\/\//i.test(pub)) return pub;
+  return '';
+}
+
+function menuKeyboard(s, chatId) {
   const link = s.channel.miniAppLink;
   const rows = [];
-  // web_app-кнопку Telegram принимает только с https-URL; t.me/bot/app —
-  // это уже готовая ссылка на мини-апп, её кладём как обычный url
-  if (link) rows.push([{ text: s.bot.buttonText, url: link }]);
+  // web_app открывает НАСТОЯЩИЙ мини-апп (обвязка Telegram, initData),
+  // но по Bot API работает только в приватных чатах. В группы и без
+  // проверенного https-URL кладём обычную url-ссылку.
+  const appUrl = shopWebAppUrl(s);
+  if (appUrl && Number(chatId) > 0) rows.push([{ text: s.bot.buttonText, web_app: { url: appUrl } }]);
+  else if (link) rows.push([{ text: s.bot.buttonText, url: link }]);
   if (s.manager.supportUrl || s.manager.buyUrl) {
     const raw = s.manager.supportUrl || s.manager.buyUrl;
     rows.push([{ text: '💬 Написать менеджеру', url: normalize(raw) }]);
@@ -66,7 +83,7 @@ async function handleUpdate(update) {
       chat_id: chatId,
       text: fill(s.bot.welcomeText, { name, shop: esc(s.brand.shopName) }),
       parse_mode: 'HTML',
-      reply_markup: menuKeyboard(s),
+      reply_markup: menuKeyboard(s, chatId),
     });
     return;
   }
@@ -76,7 +93,7 @@ async function handleUpdate(update) {
       chat_id: chatId,
       text: fill(s.bot.helpText, { name, shop: esc(s.brand.shopName) }),
       parse_mode: 'HTML',
-      reply_markup: menuKeyboard(s),
+      reply_markup: menuKeyboard(s, chatId),
     });
     return;
   }
@@ -86,7 +103,7 @@ async function handleUpdate(update) {
       chat_id: chatId,
       text: `🛍 ${esc(s.brand.shopName)}`,
       parse_mode: 'HTML',
-      reply_markup: menuKeyboard(s),
+      reply_markup: menuKeyboard(s, chatId),
     });
     return;
   }
@@ -104,12 +121,19 @@ async function handleUpdate(update) {
 }
 
 async function notifyManagers(s, text) {
+  const appUrl = shopWebAppUrl(s);
   for (const id of s.notify.chatIds) {
-    await tgApi('sendMessage', {
+    const payload = {
       chat_id: id, text, parse_mode: 'HTML',
       disable_web_page_preview: true,
       disable_notification: s.notify.silent,
-    });
+    };
+    // та же кнопка «Открыть», что у покупателя: web_app — только в личке,
+    // в группы (отрицательный chat_id) не пришиваем
+    if (appUrl && Number(id) > 0) {
+      payload.reply_markup = { inline_keyboard: [[{ text: s.bot.buttonText, web_app: { url: appUrl } }]] };
+    }
+    await tgApi('sendMessage', payload);
   }
 }
 
@@ -195,6 +219,28 @@ async function start() {
   }
   await tgApi('setMyCommands', { commands: COMMANDS });
 
+  // Кнопка меню слева от поля ввода — её же видно в превью чата. Без этого
+  // вызова у бота стоит type=default («Open»/список команд), а если продавец
+  // когда-то вписал туда обычный url через BotFather — магазин открывается
+  // браузерным окном без обвязки Mini App. Ставим web_app программно,
+  // без chat_id = дефолт для всех приватных чатов. Текст ограничен 20 символами.
+  {
+    const s0 = settings();
+    const appUrl = shopWebAppUrl(s0);
+    if (appUrl) {
+      const mb = await tgApi('setChatMenuButton', {
+        menu_button: {
+          type: 'web_app',
+          text: (s0.bot.buttonText || 'Магазин').replace(/^\W+/, '').slice(0, 20),
+          web_app: { url: appUrl },
+        },
+      });
+      if (mb.ok) console.log(`[bot] кнопка меню → web_app: ${appUrl}`);
+      else console.warn('[bot] setChatMenuButton не удался:', mb.description,
+        '— проверьте домен в @BotFather (/setdomain) или используйте t.me-ссылку мини-аппа');
+    }
+  }
+
   const publicUrl = (process.env.PUBLIC_URL || '').replace(/\/$/, '');
   const wantWebhook = String(process.env.BOT_MODE || '').toLowerCase() === 'webhook';
 
@@ -227,4 +273,4 @@ async function start() {
 
 function stop() { running = false; }
 
-module.exports = { start, stop, notifyManagers, fill, normalize, handleUpdate, webhookSecret };
+module.exports = { start, stop, notifyManagers, fill, normalize, handleUpdate, webhookSecret, shopWebAppUrl };
