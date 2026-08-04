@@ -703,6 +703,24 @@ tg?.onEvent('contentSafeAreaChanged', applySafeArea);
 tg?.onEvent('viewportChanged', applyViewport);
 window.addEventListener('resize', applyViewport);
 
+// colorScheme ('light' | 'dark') — дублируем его в CSS color-scheme, чтобы
+// нативные контролы браузера (скроллбары, автозаполнение инпутов) рендерились
+// в той же схеме, что и сам Telegram, а не спорили с ней.
+function syncColorScheme(){
+  if(!tg?.colorScheme) return;
+  document.documentElement.style.colorScheme = tg.colorScheme;
+}
+syncColorScheme();
+// По документации themeChanged приходит при любой смене темы в Telegram
+// (включая ночной режим), а новые цвета читаются из this.themeParams/colorScheme.
+// Перекрашиваемся только в режиме colorScheme=telegram — чужую тему продавца
+// тема клиента перезаписывать не должна.
+tg?.onEvent('themeChanged', () => {
+  syncColorScheme();
+  if(!settings || settings.theme.colorScheme !== 'telegram') return;
+  applySettings(settings);
+});
+
 // --- данные ---
 const user = tg?.initDataUnsafe?.user || { first_name:"Гость", username:"guest", photo_url:"" };
 const defaultAvatar = "data:image/svg+xml;utf8," + encodeURIComponent(
@@ -750,13 +768,32 @@ function cacheTheme(theme, brand){
   const boot = document.documentElement.dataset.bootClass;
   if(boot) boot.split(' ').forEach(c => c && document.body.classList.add(c));
 
+  // Режим «подстроиться под тему Telegram»: сервер не знает цвета клиента и
+  // вписал в bootTheme палитру продавца. Перекрываем цветовые переменные прямо
+  // из themeParams на первом кадре — только цветовые, через applyTheme нельзя:
+  // неполная тема уехала бы в дефолты пресета и затёрла радиусы и шрифты.
+  if(document.documentElement.dataset.bootScheme === 'telegram' && tg?.themeParams?.bg_color){
+    const tp = tg.themeParams;
+    const st = document.documentElement.style;
+    st.setProperty('--bg', tp.bg_color);
+    st.setProperty('--surface', tp.secondary_bg_color || tp.bg_color);
+    st.setProperty('--surface-2', tp.secondary_bg_color || tp.bg_color);
+    st.setProperty('--text', tp.text_color);
+    st.setProperty('--muted', tp.hint_color);
+    st.setProperty('--accent', tp.button_color);
+    st.setProperty('--accent-2', tp.link_color);
+    st.setProperty('--heart', tp.button_color);
+  }
+
   // Запасной путь — для превью в админке и для случая, когда HTML пришёл
   // из кэша прокси без подстановки.
   if(document.getElementById('bootTheme')) return;
   try{
     const saved = JSON.parse(localStorage.getItem(LS_THEME) || 'null');
     if(!saved || !saved.theme) return;
-    applyTheme(saved.theme);
+    // в режиме telegram подмешиваем цвета клиента уже на первом кадре,
+    // чтобы кэш-тема совпала с тем, что применится после /api/settings
+    applyTheme(Object.assign({}, saved.theme, telegramThemeMix(saved.theme) || {}));
     document.documentElement.style.setProperty('--cols', saved.theme.gridColumns);
     document.documentElement.style.setProperty('--ratio',
       saved.theme.imageRatio === 'square' ? '1/1' : saved.theme.imageRatio === 'portrait' ? '3/4' : '4/3');
@@ -1832,21 +1869,26 @@ function applyFavicon(s){
 }
 
 // --- применение настроек к витрине ---
+// В режиме colorScheme=telegram подмешиваем цвета клиента из themeParams,
+// чтобы мини-апп не спорил с оболочкой. Вынесено в функцию: её же зовём из
+// обработчика themeChanged при смене темы в самом Telegram.
+function telegramThemeMix(t){
+  if(t.colorScheme !== 'telegram' || !tg?.themeParams?.bg_color) return null;
+  const tp = tg.themeParams;
+  return {
+    bg: tp.bg_color, surface: tp.secondary_bg_color || tp.bg_color, surface2: tp.secondary_bg_color || tp.bg_color,
+    text: tp.text_color, muted: tp.hint_color, accent: tp.button_color, accent2: tp.link_color,
+  };
+}
+
 function applySettings(s){
   settings = s;
   const t = s.theme;
 
-  // тема: пресет + ручные переопределения; при colorScheme=telegram
-  // подмешиваем цвета клиента, чтобы мини-апп не спорил с оболочкой
-  const themeInput = { ...t };
-  if(t.colorScheme === 'telegram' && tg?.themeParams?.bg_color){
-    const tp = tg.themeParams;
-    Object.assign(themeInput, {
-      bg: tp.bg_color, surface: tp.secondary_bg_color || tp.bg_color, surface2: tp.secondary_bg_color || tp.bg_color,
-      text: tp.text_color, muted: tp.hint_color, accent: tp.button_color, accent2: tp.link_color,
-    });
-  }
+  // тема: пресет + ручные переопределения + (опционально) цвета Telegram
+  const themeInput = Object.assign({}, t, telegramThemeMix(t) || {});
   applyTheme(themeInput);
+  syncColorScheme();
   setCurrency({ symbol: s.commerce.currency, position: s.commerce.currencyPosition, locale: s.advanced.locale });
 
   document.body.classList.toggle('grain', !!t.grain);
@@ -1926,6 +1968,10 @@ function applySettings(s){
   // запоминаем тему для мгновенного старта в следующий раз (в превью не пишем —
   // там настройки несохранённые, и они не должны попасть в кэш витрины)
   if(!IS_PREVIEW) cacheTheme(s.theme, s.brand);
+
+  // цвета нативной MainButton берутся из темы — после перекраски их надо
+  // пересинхронизировать, иначе кнопка останется в прошлой палитре
+  syncMainButton();
 }
 
 async function loadSettings(){

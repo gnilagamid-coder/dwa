@@ -1,42 +1,85 @@
 <!-- @dsCard group="Компоненты" -->
 <!doctype html><html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:Inter,-apple-system,sans-serif;padding:28px;display:grid;gap:26px}
-.pane{padding:22px;border-radius:var(--r,0)}
-.pane h3{font-family:var(--disp);font-size:12px;letter-spacing:1.2px;text-transform:uppercase;opacity:.55;margin-bottom:16px;font-weight:600}
-.erd{--bg:#0a0a0a;--surface:#101010;--s2:#1a1a1a;--text:#f5f4f0;--muted:#7b7873;--accent:#fff;--accent2:#c8102e;--disp:'Oswald';--r:0px;--bw:1px}
-.market{--bg:#fff;--surface:#fff;--s2:#f1f4f5;--text:#16191c;--muted:#6b7280;--accent:#007782;--accent2:#0f172a;--disp:'Inter';--r:14px;--bw:0px}
-.gosha{--bg:#f2ece1;--surface:#fff;--s2:#e6ded0;--text:#101010;--muted:#6b6558;--accent:#d81e05;--accent2:#111;--disp:'Archivo Black';--r:0px;--bw:2px}
-.pane{background:var(--bg);color:var(--text)}
+/* Системная safe area: вырезы экрана, навигационные панели */
+html{
+  padding-top:var(--tg-safe-area-inset-top,0px);
+  padding-right:var(--tg-safe-area-inset-right,0px);
+  padding-bottom:var(--tg-safe-area-inset-bottom,0px);
+  padding-left:var(--tg-safe-area-inset-left,0px);
+}
+body{
+  font-family:Inter,-apple-system,sans-serif;
+  /* Content safe area: контент не перекрывается UI Telegram */
+  padding-top:calc(28px + var(--tg-content-safe-area-inset-top,0px));
+  padding-right:calc(28px + var(--tg-content-safe-area-inset-right,0px));
+  padding-bottom:calc(28px + var(--tg-content-safe-area-inset-bottom,0px));
+  padding-left:calc(28px + var(--tg-content-safe-area-inset-left,0px));
+  min-height:var(--app-stable-height,auto);
+  display:grid;gap:26px;align-content:start;
+  background:var(--tg-theme-bg-color);
+  color:var(--tg-theme-text-color);
+}
+.pane{padding:22px;border-radius:14px;background:var(--tg-theme-section-bg-color)}
+.pane h3{font-family:'Inter';font-size:12px;letter-spacing:1.2px;text-transform:uppercase;color:var(--tg-theme-hint-color);margin-bottom:16px;font-weight:600}
 
 .f{margin-bottom:14px;max-width:340px}
-label{display:block;font-family:var(--disp);font-size:11px;letter-spacing:.3px;text-transform:uppercase;
-  color:var(--muted);margin-bottom:6px}
-input,select{width:100%;background:var(--s2);border:max(1px,var(--bw)) solid transparent;color:var(--text);
-  padding:14px 13px;font-size:15px;font-family:inherit;border-radius:var(--r);outline:none}
-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent)}
-.err input{border-color:var(--accent2)}
-.msg{color:var(--accent2);font-size:11px;margin-top:5px}
+label{display:block;font-family:'Inter';font-size:11px;letter-spacing:.3px;text-transform:uppercase;
+  color:var(--tg-theme-hint-color);margin-bottom:6px}
+input,select{width:100%;background:var(--tg-theme-secondary-bg-color);border:1px solid transparent;color:var(--tg-theme-text-color);
+  padding:14px 13px;font-size:15px;font-family:inherit;border-radius:14px;outline:none}
+input:focus{border-color:var(--tg-theme-button-color);box-shadow:0 0 0 3px color-mix(in srgb,var(--tg-theme-button-color) 22%,transparent)}
+.err input{border-color:var(--tg-theme-destructive-text-color)}
+.msg{color:var(--tg-theme-destructive-text-color);font-size:11px;margin-top:5px}
 
 </style></head><body>
-<div class="pane erd"><h3>ERD — чёрный холст, белый акцент</h3>
-<div class="f"><label>Имя</label><input value="Иван"></div>
-<div class="f"><label>Телефон *</label><input value="+7 999 000-11-22"></div>
-<div class="f err"><label>Email</label><input value="почта@"><div class="msg">Проверьте адрес</div></div>
-<div class="f"><label>Доставка</label><select><option>СДЭК</option><option>Самовывоз</option></select></div>
+<div class="pane"><h3>Формы — тема Telegram</h3>
+<div class="f"><label for="f-name">Имя</label><input id="f-name" value="Иван"></div>
+<div class="f"><label for="f-phone">Телефон *</label><input id="f-phone" value="+7 999 000-11-22"></div>
+<div class="f err"><label for="f-email">Email</label><input id="f-email" value="почта@"><div class="msg">Проверьте адрес</div></div>
+<div class="f"><label for="f-delivery">Доставка</label><select id="f-delivery"><option>СДЭК</option><option>Самовывоз</option></select></div>
 </div>
-<div class="pane market"><h3>Маркет — светлый, доверительный</h3>
-<div class="f"><label>Имя</label><input value="Иван"></div>
-<div class="f"><label>Телефон *</label><input value="+7 999 000-11-22"></div>
-<div class="f err"><label>Email</label><input value="почта@"><div class="msg">Проверьте адрес</div></div>
-<div class="f"><label>Доставка</label><select><option>СДЭК</option><option>Самовывоз</option></select></div>
-</div>
-<div class="pane gosha"><h3>Госпечать — конструктивизм, красный</h3>
-<div class="f"><label>Имя</label><input value="Иван"></div>
-<div class="f"><label>Телефон *</label><input value="+7 999 000-11-22"></div>
-<div class="f err"><label>Email</label><input value="почта@"><div class="msg">Проверьте адрес</div></div>
-<div class="f"><label>Доставка</label><select><option>СДЭК</option><option>Самовывоз</option></select></div>
-</div>
+
+<script>
+(function() {
+  // Защита: SDK гарантированно доступен только внутри клиента Telegram
+  if (!window.Telegram || !window.Telegram.WebApp) return;
+  var tg = window.Telegram.WebApp;
+
+  // Сообщаем Telegram, что приложение готово к отображению
+  tg.ready();
+
+  // Разворачиваем Mini App на максимальную высоту, если ещё не развёрнут
+  if (!tg.isExpanded) {
+    tg.expand();
+  }
+
+  // Тема: цвета --tg-theme-* обновляются SDK автоматически,
+  // здесь лишь фиксируем текущую цветовую схему
+  function applyColorScheme() {
+    document.documentElement.setAttribute('data-theme', tg.colorScheme);
+  }
+
+  // Высота: для макета используется viewportStableHeight,
+  // а не viewportHeight (рекомендация документации)
+  function applyStableHeight() {
+    document.documentElement.style.setProperty('--app-stable-height', tg.viewportStableHeight + 'px');
+  }
+
+  applyColorScheme();
+  applyStableHeight();
+
+  tg.onEvent('themeChanged', applyColorScheme);
+
+  tg.onEvent('viewportChanged', function(data) {
+    if (data.isStateStable) {
+      applyStableHeight();
+    }
+  });
+})();
+</script>
 </body></html>

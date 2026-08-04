@@ -213,8 +213,12 @@ function bootThemeCSS(s) {
   const cls = [s.theme.grain && 'grain', s.theme.diagonal && 'diagonal',
     s.theme.animations === 'off' && 'anim-off',
     s.theme.animations === 'reduced' && 'anim-reduced'].filter(Boolean).join(' ');
+  // В режиме «подстроиться под тему Telegram» сервер не знает цветов клиента —
+  // помечаем это через bootScheme, и первый кадр дорисует клиент из themeParams.
+  const bootScript = `document.documentElement.dataset.bootClass=${JSON.stringify(cls)};` +
+    (s.theme.colorScheme === 'telegram' ? "document.documentElement.dataset.bootScheme='telegram';" : '');
   return `<style id="bootTheme">:root{${vars}}</style>` +
-    (cls ? `<script>document.documentElement.dataset.bootClass=${JSON.stringify(cls)}</script>` : '');
+    `<script>${bootScript}</script>`;
 }
 
 async function serveStatic(req, res, urlPath) {
@@ -429,8 +433,9 @@ async function handleApi(req, res, url) {
 
     const s = getSettings();
     const tgUser = validateInitData(body.initData || '');
-    // без валидного initData принимаем заказ только если мини-апп открыт вне Telegram (тест),
-    // но помечаем это в уведомлении — менеджер должен видеть разницу
+    // initData прислали, но подпись не сошлась — это подделка, а не «открыли в браузере».
+    // Пустой initData по-прежнему значит «вне Telegram» и помечается гостем.
+    if (!tgUser && body.initData) return json(res, 403, { error: 'invalid initData' });
     const products = store.read('products', []);
 
     const items = (body.items || []).map(i => {
@@ -569,6 +574,7 @@ async function handleApi(req, res, url) {
     let body; try { body = await readBody(req); } catch (e) { return json(res, 400, { error: 'bad json' }); }
     const s = getSettings();
     const tgUser = validateInitData(body.initData || '');
+    if (!tgUser && body.initData) return json(res, 403, { error: 'invalid initData' });
     if (s.notify.enabled && s.notify.onInquiry) {
       const who = tgUser
         ? (tgUser.username ? `@${esc(tgUser.username)}` : `id <code>${tgUser.id}</code>`)
