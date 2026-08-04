@@ -474,6 +474,34 @@
     .card:hover{border-color:var(--accent)}
     .cat-chip:hover{color:var(--text);border-color:var(--muted)}
     .menu-item:hover{color:var(--accent)}
+
+    /* Категории переносятся, а не прокручиваются вбок. Горизонтальная лента
+       рассчитана на палец: мышью её листать нечем — полоса прокрутки скрыта,
+       и часть категорий на десктопе была просто недоступна. */
+    .categories{flex-wrap:wrap;overflow:visible}
+
+    /* Карточка товара в две колонки: фото слева, описание и кнопки справа.
+       Модалка 560px с фото 4:3 оставляла половину высоты экрана пустой, а
+       описание уезжало под сгиб. */
+    #detailOverlay .sheet{width:min(920px,100%)}
+    #detailOverlay .sheet-scroll{
+      display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);
+      column-gap:30px;align-content:start;grid-auto-rows:min-content;
+    }
+    /* Медиа-блок занимает всю высоту левой колонки. Без этого grid растягивал
+       название на высоту фото (332px вместо 30) и описание уезжало вниз. */
+    /* span, а не «1 / -1»: в неявной сетке -1 указывает на конец ЯВНОЙ сетки,
+       то есть на первый же ряд, и блок переставал перекрывать колонку.
+       Справа максимум шесть элементов — восьми рядов хватает с запасом. */
+    #detailOverlay .detail-media{grid-column:1;grid-row:1 / span 8;align-self:start}
+    #detailOverlay .detail-name,
+    #detailOverlay .detail-price,
+    #detailOverlay .detail-stock,
+    #detailOverlay .detail-desc,
+    #detailOverlay .detail-actions,
+    #detailOverlay #detailCartBtn{grid-column:2}
+    /* описание больше не обрезается по высоте — места хватает */
+    #detailOverlay .detail-desc{max-height:none}
   }
 
   /* Совсем широкие экраны: не растягиваем текст на всю ширину, но и не жмём
@@ -592,11 +620,15 @@
   <div class="sheet" id="detailSheet">
     <button class="sheet-close" data-close aria-label="Закрыть"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
     <div class="sheet-scroll">
-      <div class="detail-gallery" id="detailGallery">
-        <div class="detail-gallery-track" id="detailGalleryTrack"></div>
-        <div class="gallery-counter" id="galleryCounter" style="display:none"></div>
+      <!-- обёртка нужна для десктопной раскладки: она занимает всю высоту
+           левой колонки, иначе grid растягивал бы название на высоту фото -->
+      <div class="detail-media">
+        <div class="detail-gallery" id="detailGallery">
+          <div class="detail-gallery-track" id="detailGalleryTrack"></div>
+          <div class="gallery-counter" id="galleryCounter" style="display:none"></div>
+        </div>
+        <div class="detail-gallery-dots" id="detailGalleryDots"></div>
       </div>
-      <div class="detail-gallery-dots" id="detailGalleryDots"></div>
       <div class="detail-name" id="detailName"></div>
       <div class="detail-price" id="detailPrice"></div>
       <div class="detail-stock" id="detailStock" style="display:none"></div>
