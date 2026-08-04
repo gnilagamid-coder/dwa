@@ -265,8 +265,8 @@
 
 <!-- ?v= бампается при релизе: страхует от промежуточных прокси, которые
      игнорируют no-cache и держат старый shared.js поверх новой разметки -->
-<script src="/theme-core.js?v=2.3"></script>
-<script src="/shared.js?v=2.3"></script>
+<script src="/theme-core.js?v=2.4"></script>
+<script src="/shared.js?v=2.4"></script>
 <script>
 let TOKEN = '';
 let settings = null;
@@ -451,6 +451,10 @@ function bindPanel(root){
 // смена темы должна сразу отражаться на самой админке — это и есть живое превью
 function afterChange(path){
   if(path.startsWith('theme.')){ applyTheme(settings.theme); refreshPreview(); }
+  if(path === 'theme.colorScheme'){
+    const sw = $('schemeWarn');
+    if(sw) sw.style.display = settings.theme.colorScheme === 'telegram' ? '' : 'none';
+  }
   if(path === 'brand.shopName') $('shopTitle').textContent = settings.brand.shopName || 'Магазин';
   // у каждого мерчанта свой набор ключей — перерисовываем форму под выбранного
   if(path === 'payments.provider') buildPayments();
@@ -645,6 +649,14 @@ function buildTheme(){
       F.sel('theme.colorScheme','Источник цветов', [['dark','Своя тёмная'],['light','Своя светлая'],['telegram','Подстроиться под тему Telegram']],
         { sub:'«Подстроиться» — мини-апп возьмёт цвета клиента пользователя. Свои цвета при этом игнорируются.' }),
     ]})}
+    <div id="schemeWarn" style="display:none;background:rgba(232,52,28,.12);border:1px solid var(--accent);color:var(--text);padding:12px 14px;margin:0 0 16px;font-size:13px;line-height:1.45">
+      ⚠️ Включён режим «Подстроиться под тему Telegram».<br>
+      Админка и превью всегда показывают ВАШУ палитру, но на витрине её полностью
+      перезапишет тема покупателя: у клиента со светлой темой магазин станет белым,
+      кнопки перекрасятся в цвет кнопки его Telegram. Если дизайн задуман строго
+      тёмным — выберите «Своя тёмная». Режим проверяется так: откройте витрину
+      в Telegram со светлой и с тёмной темой.
+    </div>
     ${renderCard({ title:'Типографика и форма', fields:[
       F.sel('theme.fontDisplay','Акцидентный шрифт', Object.keys(FONT_STACKS).map(k=>[k,k])),
       F.range('theme.fontScale','Масштаб текста', { min:80, max:130, unit:'%' }),
@@ -670,6 +682,8 @@ function buildTheme(){
     ]})}
   `;
   bindPanel($('panel-theme'));
+  const sw = $('schemeWarn');
+  if(sw) sw.style.display = settings.theme.colorScheme === 'telegram' ? '' : 'none';
   $('presetGrid').querySelectorAll('.preset').forEach(el => el.onclick = () => {
     // пресет сбрасывает ручные переопределения — иначе «сменил пресет, ничего не изменилось»
     const p = THEME_PRESETS[el.dataset.preset];

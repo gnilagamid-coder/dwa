@@ -9,8 +9,8 @@
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <!-- ?v= бампается при релизе: страхует от промежуточных прокси, которые
      игнорируют no-cache и держат старый shared.js поверх новой разметки -->
-<script src="/theme-core.js?v=2.3"></script>
-<script src="/shared.js?v=2.3"></script>
+<script src="/theme-core.js?v=2.4"></script>
+<script src="/shared.js?v=2.4"></script>
 <style>
   :root{
     /* дефолты до загрузки настроек — чтобы первый кадр не был белым «мигом» */
@@ -819,15 +819,18 @@ function cacheTheme(theme, brand){
   if(document.documentElement.dataset.bootScheme === 'telegram' && tg?.themeParams?.bg_color){
     const tp = tg.themeParams;
     const st = document.documentElement.style;
-    st.setProperty('--bg', tp.bg_color);
-    st.setProperty('--surface', tp.secondary_bg_color || tp.bg_color);
-    st.setProperty('--surface-2', tp.secondary_bg_color || tp.bg_color);
-    st.setProperty('--text', tp.text_color);
-    st.setProperty('--muted', tp.hint_color);
-    st.setProperty('--accent', tp.button_color);
-    st.setProperty('--accent-2', tp.link_color);
-    st.setProperty('--heart', tp.button_color);
-    st.setProperty('--on-accent', contrastOnColor(document.documentElement, tp.button_color));
+    // Ставим только реально присланные ключи: отсутствующий цвет не должен
+    // записывать в переменную строку 'undefined' и ломать палитру.
+    const setIf = (k, v) => { if(v) st.setProperty(k, v); };
+    setIf('--bg', tp.bg_color);
+    setIf('--surface', tp.secondary_bg_color);
+    setIf('--surface-2', tp.secondary_bg_color);
+    setIf('--text', tp.text_color);
+    setIf('--muted', tp.hint_color);
+    setIf('--accent', tp.button_color);
+    setIf('--accent-2', tp.link_color);
+    setIf('--heart', tp.button_color);
+    if(tp.button_color) st.setProperty('--on-accent', contrastOnColor(document.documentElement, tp.button_color));
   }
 
   // Запасной путь — для превью в админке и для случая, когда HTML пришёл
@@ -1484,7 +1487,20 @@ function updateCartUI(){
 const HEX_RE = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
 function themeHex(varName){
   const v = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
-  return HEX_RE.test(v) ? v : undefined;
+  if(!v) return undefined;
+  if(HEX_RE.test(v)) return v;
+  // Продавец мог вписать rgb() или название цвета, а setHeaderColor /
+  // setBackgroundColor / MainButton принимают только hex. Раньше в этом случае
+  // шапка уезжала на ключевое слово 'bg_color' — а это ЦВЕТ ИЗ ТЕМЫ КЛИЕНТА,
+  // у покупателя со светлым Telegram шапка и фон становились белыми.
+  // Разрешаем любой CSS-цвет в hex через скрытый элемент.
+  const probe = document.createElement('i');
+  probe.style.cssText = 'position:absolute;visibility:hidden;color:' + v;
+  document.documentElement.appendChild(probe);
+  const rgb = (getComputedStyle(probe).color.match(/[\d.]+/g) || []).map(Number);
+  probe.remove();
+  if(rgb.length < 3) return undefined;
+  return '#' + rgb.slice(0, 3).map(x => Math.min(255, Math.max(0, Math.round(x))).toString(16).padStart(2, '0')).join('');
 }
 // Нативная MainButton есть только внутри настоящего клиента Telegram. В обычном
 // браузере объект тоже существует, но кнопка не отрисовывается — там нужна своя.
@@ -1955,10 +1971,16 @@ function applyFavicon(s){
 function telegramThemeMix(t){
   if(t.colorScheme !== 'telegram' || !tg?.themeParams?.bg_color) return null;
   const tp = tg.themeParams;
-  return {
-    bg: tp.bg_color, surface: tp.secondary_bg_color || tp.bg_color, surface2: tp.secondary_bg_color || tp.bg_color,
-    text: tp.text_color, muted: tp.hint_color, accent: tp.button_color, accent2: tp.link_color,
-  };
+  // Только реально присланные ключи: отсутствующий цвет Telegram не должен
+  // затирать палитру продавца значением undefined.
+  const mix = {};
+  if(tp.bg_color) mix.bg = tp.bg_color;
+  if(tp.secondary_bg_color){ mix.surface = tp.secondary_bg_color; mix.surface2 = tp.secondary_bg_color; }
+  if(tp.text_color) mix.text = tp.text_color;
+  if(tp.hint_color) mix.muted = tp.hint_color;
+  if(tp.button_color) mix.accent = tp.button_color;
+  if(tp.link_color) mix.accent2 = tp.link_color;
+  return mix;
 }
 
 function applySettings(s){
