@@ -94,6 +94,13 @@ const DEFAULTS = {
     successText: 'Спасибо! Заказ отправлен менеджеру — ждите обратной связи.',
   },
 
+  // --- промокоды ---
+  promo: {
+    enabled: false,
+    label: 'Промокод',
+    codes: [],   // [{code, type:'percent'|'fixed', value, minTotal, uses, usesLeft, active}]
+  },
+
   // --- онлайн-оплата ---
   payments: {
     enabled: false,
@@ -139,6 +146,8 @@ const DEFAULTS = {
     socialLinks: [],        // [{label, url}]
     showFavorites: true,
     aboutText: '',
+    // как показать, что аватарка в шапке — это меню: caret | dot | label | none
+    avatarHint: 'caret',
   },
 
   // --- прочее ---
@@ -261,6 +270,22 @@ function sanitize(input) {
       successTitle: str(ch.successTitle, DEFAULTS.checkout.successTitle, 60),
       successText: str(ch.successText, DEFAULTS.checkout.successText, 400),
     },
+    promo: {
+      enabled: bool(s.promo && s.promo.enabled),
+      label: str(s.promo && s.promo.label, 'Промокод', 30),
+      codes: (Array.isArray(s.promo && s.promo.codes) ? s.promo.codes : []).slice(0, 50).map(c => ({
+        // код нормализуем сразу: клиент вводит как попало, сравнивать надо одинаково
+        code: str(c && c.code, '', 32).trim().toUpperCase(),
+        type: oneOf(c && c.type, ['percent', 'fixed'], 'percent'),
+        value: num(c && c.value, 0, 0, 1e9),
+        minTotal: num(c && c.minTotal, 0, 0, 1e9),
+        // null = без ограничения по количеству применений
+        usesLeft: (c && (c.usesLeft === null || c.usesLeft === undefined || c.usesLeft === ''))
+          ? null : Math.max(0, num(c.usesLeft, 0, 0, 1e6)),
+        used: num(c && c.used, 0, 0, 1e9),
+        active: bool(c && c.active, true),
+      })).filter(c => c.code),
+    },
     payments: {
       enabled: bool(pay.enabled),
       provider: str(pay.provider, 'platega', 24),
@@ -303,6 +328,7 @@ function sanitize(input) {
         .filter(l => l.url),
       showFavorites: bool(pr.showFavorites, true),
       aboutText: str(pr.aboutText, '', 500),
+      avatarHint: oneOf(pr.avatarHint, ['caret', 'dot', 'label', 'none'], 'caret'),
     },
     advanced: {
       locale: str(ad.locale, 'ru-RU', 12),

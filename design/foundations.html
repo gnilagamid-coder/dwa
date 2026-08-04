@@ -1,0 +1,91 @@
+<!-- @dsCard group="Основы" -->
+<!doctype html><html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+/* Системная safe area: вырезы экрана, навигационные панели */
+html{
+  padding-top:var(--tg-safe-area-inset-top,0px);
+  padding-right:var(--tg-safe-area-inset-right,0px);
+  padding-bottom:var(--tg-safe-area-inset-bottom,0px);
+  padding-left:var(--tg-safe-area-inset-left,0px);
+}
+body{
+  font-family:Inter,-apple-system,sans-serif;
+  /* Content safe area: контент не перекрывается UI Telegram */
+  padding-top:calc(28px + var(--tg-content-safe-area-inset-top,0px));
+  padding-right:calc(28px + var(--tg-content-safe-area-inset-right,0px));
+  padding-bottom:calc(28px + var(--tg-content-safe-area-inset-bottom,0px));
+  padding-left:calc(28px + var(--tg-content-safe-area-inset-left,0px));
+  min-height:var(--app-stable-height,auto);
+  display:grid;gap:26px;align-content:start;
+  background:var(--tg-theme-bg-color);
+  color:var(--tg-theme-text-color);
+}
+.pane{padding:22px;border-radius:14px;background:var(--tg-theme-section-bg-color)}
+.pane h3{font-family:'Inter';font-size:12px;letter-spacing:1.2px;text-transform:uppercase;color:var(--tg-theme-hint-color);margin-bottom:16px;font-weight:600}
+
+.sw{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:22px}
+.sw i{width:64px;height:64px;display:block;border-radius:14px;border:1px solid var(--tg-theme-hint-color)}
+.sw span{display:block;font-size:10px;color:var(--tg-theme-hint-color);margin-top:6px;font-family:ui-monospace,monospace}
+.t1{font-family:'Inter';font-size:34px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;line-height:1.05;color:var(--tg-theme-text-color)}
+.t2{font-family:'Inter';font-size:20px;font-weight:600;text-transform:uppercase;margin-top:10px;color:var(--tg-theme-accent-text-color)}
+.t3{font-size:15px;margin-top:10px;line-height:1.5;color:var(--tg-theme-text-color)}
+.t4{font-size:12px;color:var(--tg-theme-hint-color);margin-top:6px}
+
+</style></head><body>
+<div class="pane"><h3>Основы — цвета из темы Telegram</h3>
+<div class="sw">
+  <div><i style="background:var(--tg-theme-bg-color)"></i><span>bg_color</span></div>
+  <div><i style="background:var(--tg-theme-secondary-bg-color)"></i><span>secondary_bg_color</span></div>
+  <div><i style="background:var(--tg-theme-button-color)"></i><span>button_color</span></div>
+  <div><i style="background:var(--tg-theme-accent-text-color)"></i><span>accent_text_color</span></div>
+  <div><i style="background:var(--tg-theme-hint-color)"></i><span>hint_color</span></div>
+</div>
+<div class="t1">Каталог</div>
+<div class="t2">Плакат «Ритм»</div>
+<div class="t3">Основной текст интерфейса. Шелкография, 50×70, тираж 30 экземпляров.</div>
+<div class="t4">Вспомогательный текст — остатки, подписи, сноски</div>
+</div>
+
+<script>
+(function() {
+  // Защита: SDK гарантированно доступен только внутри клиента Telegram
+  if (!window.Telegram || !window.Telegram.WebApp) return;
+  var tg = window.Telegram.WebApp;
+
+  // Сообщаем Telegram, что приложение готово к отображению
+  tg.ready();
+
+  // Разворачиваем Mini App на максимальную высоту, если ещё не развёрнут
+  if (!tg.isExpanded) {
+    tg.expand();
+  }
+
+  // Тема: цвета --tg-theme-* обновляются SDK автоматически,
+  // здесь лишь фиксируем текущую цветовую схему
+  function applyColorScheme() {
+    document.documentElement.setAttribute('data-theme', tg.colorScheme);
+  }
+
+  // Высота: для макета используется viewportStableHeight,
+  // а не viewportHeight (рекомендация документации)
+  function applyStableHeight() {
+    document.documentElement.style.setProperty('--app-stable-height', tg.viewportStableHeight + 'px');
+  }
+
+  applyColorScheme();
+  applyStableHeight();
+
+  tg.onEvent('themeChanged', applyColorScheme);
+
+  tg.onEvent('viewportChanged', function(data) {
+    if (data.isStateStable) {
+      applyStableHeight();
+    }
+  });
+})();
+</script>
+</body></html>

@@ -6,7 +6,11 @@
 <title>Админка магазина</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&display=swap" rel="stylesheet">
+<!-- media="print" снимает блокировку рендера: браузер грузит файл в фоне,
+     а onload переключает его на экранные стили. Без этого админка ждала
+     ответа fonts.googleapis.com прежде чем показать хоть что-то. -->
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&display=swap"
+      rel="stylesheet" media="print" onload="this.media='all'">
 <style>
   :root{
     --bg:#0d0d0d; --surface:#161616; --surface-2:#202020;
@@ -65,6 +69,10 @@
   .switch-thumb{width:18px;height:18px;background:var(--text);position:absolute;top:3px;left:3px;transition:transform .15s}
   .switch-track.on .switch-thumb{transform:translateX(18px);background:var(--bg)}
 
+  .promo-item{background:var(--surface-2);padding:12px;margin-bottom:10px;border-left:3px solid var(--accent)}
+  .promo-item.off{opacity:.5;border-left-color:var(--muted)}
+  .promo-item .field{margin-bottom:8px}
+  .promo-used{font-size:11px;color:var(--muted);margin-top:2px}
   .marks{display:grid;grid-template-columns:repeat(auto-fill,minmax(48px,1fr));gap:8px}
   .mark{
     aspect-ratio:1;border:2px solid var(--surface-2);background:var(--surface-2);
@@ -120,6 +128,7 @@
   .row .price{font-family:var(--font-display);font-size:12px;color:var(--accent-2);font-weight:600}
   .row .category{font-size:11px;color:var(--muted);background:var(--surface-2);padding:2px 7px}
   .row .actions{display:flex;gap:5px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;max-width:112px}
+  .row .actions button:disabled{opacity:.25}
   .row button.icon-toggle{padding:0;width:32px;height:32px;display:flex;align-items:center;justify-content:center;background:var(--surface-2)}
   .row button.icon-toggle svg{width:14px;height:14px}
   .row button.icon-toggle.on{background:var(--accent);color:var(--bg)}
@@ -136,6 +145,32 @@
   .order pre{white-space:pre-wrap;font-family:inherit;font-size:12.5px;line-height:1.5}
 
   .empty{color:var(--muted);text-align:center;padding:26px 0;font-size:13px}
+
+  /* Десктоп. Раньше админка оставалась колонкой 620px на любом мониторе:
+     на 1600px две трети экрана пустовали, а 14 вкладок (больше 1000px) не
+     влезали и требовали горизонтальной прокрутки — нужную приходилось искать
+     вслепую. Даём ширину и разрешаем вкладкам переноситься. */
+  @media (min-width:1000px){
+    body{padding-top:0}
+    .wrap{max-width:980px;padding:0 20px}
+    .topbar{margin:0 -20px 20px;padding:16px 20px 0}
+    .tabs{flex-wrap:wrap;overflow:visible}
+    .tab{font-size:12.5px;padding:9px 14px}
+    /* поля в две колонки — форма товара и настройки перестают быть длинной кишкой */
+    .row2>.field{min-width:180px}
+    .card{padding:20px}
+    .savebar .inner{max-width:980px}
+    .dialog{max-width:440px}
+    /* превью витрины и настройки рядом, а не друг под другом */
+    .preview-card{position:sticky;top:96px}
+  }
+  @media (min-width:1280px){
+    .wrap{max-width:1180px}
+    .savebar .inner{max-width:1180px}
+    /* панель «Тема» в две колонки: слева телефон с превью, справа параметры */
+    #panel-theme{columns:2;column-gap:18px}
+    #panel-theme>.card{break-inside:avoid;margin-bottom:18px}
+  }
 
   /* превью витрины «в телефоне» */
   .preview-card h2{align-items:center}
@@ -172,7 +207,14 @@
   .savebar .inner{max-width:620px;margin:0 auto;display:flex;gap:10px;align-items:center}
   .savebar button{flex:1}
   .savebar .status{font-size:12px;color:var(--accent-2);flex:0 0 auto}
-  .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:80px;background:var(--surface-2);border:1px solid var(--accent);padding:11px 16px;font-size:13px;z-index:50;max-width:90%;text-align:center}
+  .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:80px;background:var(--surface-2);border:1px solid var(--accent);padding:11px 16px;font-size:13px;z-index:50;max-width:90%;text-align:center;line-height:1.45}
+  .toast.err{background:var(--danger);border-color:var(--danger);color:#fff;font-weight:600}
+
+  .dialog-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:60;display:flex;align-items:center;justify-content:center;padding:20px}
+  .dialog{background:var(--surface);border:1px solid var(--surface-2);border-top:2px solid var(--accent);padding:20px;max-width:400px;width:100%}
+  .dialog-text{font-size:14px;line-height:1.5;margin-bottom:18px}
+  .dialog-actions{display:flex;gap:8px}
+  .dialog-actions button{flex:1}
 </style>
 </head>
 <body>
@@ -205,6 +247,7 @@
   <div class="panel" id="panel-commerce"></div>
   <div class="panel" id="panel-checkout"></div>
   <div class="panel" id="panel-payments"></div>
+  <div class="panel" id="panel-promo"></div>
   <div class="panel" id="panel-notify"></div>
   <div class="panel" id="panel-bot"></div>
   <div class="panel" id="panel-channel"></div>
@@ -222,7 +265,8 @@
 
 <!-- ?v= бампается при релизе: страхует от промежуточных прокси, которые
      игнорируют no-cache и держат старый shared.js поверх новой разметки -->
-<script src="/shared.js?v=2.1"></script>
+<script src="/theme-core.js?v=2.4"></script>
+<script src="/shared.js?v=2.4"></script>
 <script>
 let TOKEN = '';
 let settings = null;
@@ -257,12 +301,41 @@ async function api(path, opts = {}){
   return data;
 }
 
-function toast(msg){
+// Собственные уведомления и подтверждения вместо alert/confirm: во встроенном
+// браузере Telegram нативные диалоги блокируются молча, и продавец видит, что
+// «кнопка не работает», без единого сообщения об ошибке.
+function toast(msg, isError){
+  document.querySelectorAll('.toast').forEach(t => t.remove()); // не копим стопку
   const el = document.createElement('div');
-  el.className = 'toast';
+  el.className = 'toast' + (isError ? ' err' : '');
   el.textContent = msg;
   document.body.appendChild(el);
-  setTimeout(()=> el.remove(), 2600);
+  setTimeout(()=> el.remove(), isError ? 4200 : 2600);
+}
+
+// Промис-подтверждение с фокусом и Esc — замена confirm()
+function confirmDialog(text, okLabel = 'Удалить'){
+  return new Promise(resolve => {
+    const wrap = document.createElement('div');
+    wrap.className = 'dialog-backdrop';
+    wrap.innerHTML = `
+      <div class="dialog" role="alertdialog" aria-modal="true">
+        <div class="dialog-text"></div>
+        <div class="dialog-actions">
+          <button type="button" class="secondary" data-no>Отмена</button>
+          <button type="button" data-yes>${esc(okLabel)}</button>
+        </div>
+      </div>`;
+    wrap.querySelector('.dialog-text').textContent = text;
+    document.body.appendChild(wrap);
+    const close = v => { wrap.remove(); document.removeEventListener('keydown', onKey); resolve(v); };
+    const onKey = e => { if(e.key === 'Escape') close(false); if(e.key === 'Enter') close(true); };
+    document.addEventListener('keydown', onKey);
+    wrap.querySelector('[data-no]').onclick = () => close(false);
+    wrap.querySelector('[data-yes]').onclick = () => close(true);
+    wrap.onclick = e => { if(e.target === wrap) close(false); };
+    wrap.querySelector('[data-yes]').focus();
+  });
 }
 
 // ---------- конструктор полей ----------
@@ -378,6 +451,10 @@ function bindPanel(root){
 // смена темы должна сразу отражаться на самой админке — это и есть живое превью
 function afterChange(path){
   if(path.startsWith('theme.')){ applyTheme(settings.theme); refreshPreview(); }
+  if(path === 'theme.colorScheme'){
+    const sw = $('schemeWarn');
+    if(sw) sw.style.display = settings.theme.colorScheme === 'telegram' ? '' : 'none';
+  }
   if(path === 'brand.shopName') $('shopTitle').textContent = settings.brand.shopName || 'Магазин';
   // у каждого мерчанта свой набор ключей — перерисовываем форму под выбранного
   if(path === 'payments.provider') buildPayments();
@@ -443,7 +520,7 @@ function renderLines(box, path){
 /* ==================== ВКЛАДКИ ==================== */
 const TABS = [
   ['dashboard','Обзор'], ['brand','Бренд'], ['theme','Тема'], ['catalog','Каталог'],
-  ['commerce','Продажи'], ['checkout','Форма заказа'], ['payments','Оплата'], ['notify','Уведомления'],
+  ['commerce','Продажи'], ['checkout','Форма заказа'], ['payments','Оплата'], ['promo','Промокоды'], ['notify','Уведомления'],
   ['bot','Бот'], ['channel','Канал'], ['products','Товары'], ['orders','Заказы'], ['advanced','Ещё'],
 ];
 let activeTab = 'dashboard';
@@ -483,6 +560,7 @@ function buildPanel(id){
   if(id === 'commerce')  return renderPanel('panel-commerce', PANEL_COMMERCE());
   if(id === 'checkout')  return renderPanel('panel-checkout', PANEL_CHECKOUT());
   if(id === 'payments')  return buildPayments();
+  if(id === 'promo')     return buildPromo();
   if(id === 'notify')    return buildNotify();
   if(id === 'bot')       return renderPanel('panel-bot', PANEL_BOT());
   if(id === 'channel')   return renderPanel('panel-channel', PANEL_CHANNEL());
@@ -516,6 +594,9 @@ const PANEL_BRAND = () => ([
     F.area('profile.aboutText','Описание', { ph:'Пара слов о вас' }),
     F.links('profile.socialLinks','Ссылки в профиле', { sub:'Avito, ВК, канал, сайт — что угодно. Пустая ссылка не показывается.' }),
     F.sw('profile.showFavorites','Пункт «Избранное» в профиле'),
+    F.sel('profile.avatarHint','Как обозначить меню на аватарке',
+      [['caret','Стрелка вниз'],['dot','Точка'],['label','Подпись «Меню»'],['none','Ничего']],
+      { sub:'Аватарка в шапке открывает меню, но без подсказки это неочевидно — покупатели её просто не нажимают.' }),
   ]},
 ]);
 
@@ -568,6 +649,14 @@ function buildTheme(){
       F.sel('theme.colorScheme','Источник цветов', [['dark','Своя тёмная'],['light','Своя светлая'],['telegram','Подстроиться под тему Telegram']],
         { sub:'«Подстроиться» — мини-апп возьмёт цвета клиента пользователя. Свои цвета при этом игнорируются.' }),
     ]})}
+    <div id="schemeWarn" style="display:none;background:rgba(232,52,28,.12);border:1px solid var(--accent);color:var(--text);padding:12px 14px;margin:0 0 16px;font-size:13px;line-height:1.45">
+      ⚠️ Включён режим «Подстроиться под тему Telegram».<br>
+      Админка и превью всегда показывают ВАШУ палитру, но на витрине её полностью
+      перезапишет тема покупателя: у клиента со светлой темой магазин станет белым,
+      кнопки перекрасятся в цвет кнопки его Telegram. Если дизайн задуман строго
+      тёмным — выберите «Своя тёмная». Режим проверяется так: откройте витрину
+      в Telegram со светлой и с тёмной темой.
+    </div>
     ${renderCard({ title:'Типографика и форма', fields:[
       F.sel('theme.fontDisplay','Акцидентный шрифт', Object.keys(FONT_STACKS).map(k=>[k,k])),
       F.range('theme.fontScale','Масштаб текста', { min:80, max:130, unit:'%' }),
@@ -593,6 +682,8 @@ function buildTheme(){
     ]})}
   `;
   bindPanel($('panel-theme'));
+  const sw = $('schemeWarn');
+  if(sw) sw.style.display = settings.theme.colorScheme === 'telegram' ? '' : 'none';
   $('presetGrid').querySelectorAll('.preset').forEach(el => el.onclick = () => {
     // пресет сбрасывает ручные переопределения — иначе «сменил пресет, ничего не изменилось»
     const p = THEME_PRESETS[el.dataset.preset];
@@ -784,6 +875,95 @@ async function buildPayments(){
   $('callbackUrl').textContent = `${location.origin}/api/pay/callback/${active ? active.key : 'platega'}`;
 }
 
+// ---------- Промокоды ----------
+function buildPromo(){
+  const codes = settings.promo.codes || [];
+  $('panel-promo').innerHTML = `
+    ${renderCard({ title:'Промокоды',
+      hint:'Поле для кода появится в форме заказа. Скидку считает сервер — подделать её из браузера нельзя, ' +
+           'а сами коды не отдаются на витрину, поэтому подобрать их списком не получится.',
+      fields:[
+        F.sw('promo.enabled','Принимать промокоды'),
+        F.text('promo.label','Подпись поля', { ph:'Промокод' }),
+      ]})}
+    <div class="card">
+      <h2>Коды (${codes.length})</h2>
+      <div id="promoList"></div>
+      <button type="button" class="secondary" id="promoAdd" style="width:100%;margin-top:10px">+ Добавить код</button>
+    </div>`;
+  bindPanel($('panel-promo'));
+  renderPromoList();
+  $('promoAdd').onclick = () => {
+    settings.promo.codes = [...(settings.promo.codes || []),
+      { code:'', type:'percent', value:10, minTotal:0, usesLeft:null, used:0, active:true }];
+    markDirty(); buildPromo();
+  };
+}
+
+function renderPromoList(){
+  const box = $('promoList');
+  const codes = settings.promo.codes || [];
+  if(!codes.length){ box.innerHTML = '<div class="empty">Кодов пока нет</div>'; return; }
+  box.innerHTML = codes.map((c,i)=>`
+    <div class="promo-item ${c.active?'':'off'}">
+      <div class="row2">
+        <div class="field" style="flex:2">
+          <label>Код</label>
+          <input data-p="${i}" data-f="code" value="${esc(c.code)}" placeholder="SALE20" style="text-transform:uppercase">
+        </div>
+        <div class="field">
+          <label>Тип</label>
+          <select data-p="${i}" data-f="type">
+            <option value="percent" ${c.type==='percent'?'selected':''}>Процент</option>
+            <option value="fixed" ${c.type==='fixed'?'selected':''}>Сумма</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>${c.type==='percent'?'Скидка, %':'Скидка'}</label>
+          <input type="number" min="0" data-p="${i}" data-f="value" value="${c.value}">
+        </div>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label>Заказ от</label>
+          <input type="number" min="0" data-p="${i}" data-f="minTotal" value="${c.minTotal}" placeholder="0 — без ограничения">
+        </div>
+        <div class="field">
+          <label>Осталось применений</label>
+          <input type="number" min="0" data-p="${i}" data-f="usesLeft" value="${c.usesLeft ?? ''}" placeholder="без ограничения">
+        </div>
+        <div class="field" style="flex:0 0 auto;display:flex;align-items:flex-end;gap:6px">
+          <button type="button" class="icon-toggle ${c.active?'on':''}" data-toggle="${i}" title="${c.active?'Выключить':'Включить'}">${c.active?'✓':'○'}</button>
+          <button type="button" class="row-remove" data-del="${i}" title="Удалить">${TRASH_SVG}</button>
+        </div>
+      </div>
+      <div class="promo-used">Использован раз: ${c.used || 0}${c.usesLeft===null?'':` · осталось ${c.usesLeft}`}</div>
+    </div>`).join('');
+
+  box.querySelectorAll('[data-p]').forEach(el => {
+    el.oninput = el.onchange = () => {
+      const c = settings.promo.codes[Number(el.dataset.p)];
+      const f = el.dataset.f;
+      if(f === 'usesLeft') c[f] = el.value === '' ? null : Math.max(0, Number(el.value) || 0);
+      else if(f === 'value' || f === 'minTotal') c[f] = Math.max(0, Number(el.value) || 0);
+      else if(f === 'code') c[f] = el.value.toUpperCase();
+      else c[f] = el.value;
+      markDirty();
+      if(f === 'type') renderPromoList(); // меняется подпись поля скидки
+    };
+  });
+  box.querySelectorAll('[data-toggle]').forEach(b => b.onclick = () => {
+    const c = settings.promo.codes[Number(b.dataset.toggle)];
+    c.active = !c.active; markDirty(); renderPromoList();
+  });
+  box.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
+    const c = settings.promo.codes[Number(b.dataset.del)];
+    if(c.code && !await confirmDialog(`Удалить промокод ${c.code}?`)) return;
+    settings.promo.codes.splice(Number(b.dataset.del), 1);
+    markDirty(); buildPromo();
+  });
+}
+
 // ---------- Уведомления ----------
 function buildNotify(){
   $('panel-notify').innerHTML = `
@@ -883,12 +1063,12 @@ function buildAdvanced(){
   $('importInput').onchange = async e => {
     const file = e.target.files[0];
     if(!file) return;
-    if(!confirm('Импорт заменит текущие настройки и список товаров. Продолжить?')) return;
+    if(!await confirmDialog('Импорт заменит текущие настройки и список товаров. Продолжить?', 'Импортировать')) return;
     try{
       await api('/api/admin/import', { method:'POST', body: await file.text() });
       toast('Импортировано');
       await init();
-    }catch(err){ alert('Не удалось импортировать: ' + err.message); }
+    }catch(err){ toast('Не удалось импортировать: ' + err.message, true); }
   };
 }
 
@@ -990,7 +1170,7 @@ ${o.customer.name || ''}${o.customer.phone ? ' · '+o.customer.phone : ''}${o.us
   ` : '<div class="empty">Заказов пока нет</div>';
   const btn = $('clearOrders');
   if(btn) btn.onclick = async () => {
-    if(!confirm('Удалить всю историю заказов?')) return;
+    if(!await confirmDialog('Удалить всю историю заказов? Отменить это будет нельзя.')) return;
     await api('/api/admin/orders', { method:'DELETE' });
     buildOrders();
   };
@@ -1024,6 +1204,9 @@ function buildProducts(){
       </div>
     </div>
     <div class="list-title">Каталог (${products.length})</div>
+    <div class="field" id="prodSearchBox" style="${products.length > 7 ? '' : 'display:none'}">
+      <input type="text" id="prodSearch" placeholder="Найти товар по названию или категории" autocomplete="off">
+    </div>
     <div class="list" id="list"></div>`;
 
   $('photoGrid') && renderPhotoGrid();
@@ -1031,6 +1214,8 @@ function buildProducts(){
   renderList();
   $('saveProductBtn').onclick = saveProduct;
   $('cancelEditBtn').onclick = resetProductForm;
+  const ps = $('prodSearch');
+  if(ps) ps.oninput = debounce(() => { productFilter = ps.value.trim().toLowerCase(); renderList(); }, 150);
 }
 
 function renderPhotoGrid(){
@@ -1101,7 +1286,7 @@ async function onPhotoSelected(e, slotIndex){
     ]);
     pendingImages[slotIndex] = fullRes.id;
     pendingThumbs[slotIndex] = thumbRes.id;
-  }catch(err){ alert('Не удалось загрузить фото: ' + err.message); }
+  }catch(err){ toast('Не удалось загрузить фото: ' + err.message, true); }
   renderPhotoGrid();
 }
 
@@ -1109,8 +1294,8 @@ async function saveProduct(){
   const val = id => $(id).value.trim();
   const name = val('pName');
   const price = Number(val('pPrice'));
-  if(!name) return alert('Укажите название');
-  if(!price && !settings.commerce.priceHidden) return alert('Укажите цену');
+  if(!name){ toast('Укажите название товара', true); $('pName').focus(); return; }
+  if(!price && !settings.commerce.priceHidden){ toast('Укажите цену', true); $('pPrice').focus(); return; }
 
   const payload = {
     name, price,
@@ -1131,7 +1316,7 @@ async function saveProduct(){
       products.push(await api('/api/admin/products', { method:'POST', body: JSON.stringify(payload) }));
       toast('Товар добавлен');
     }
-  }catch(e){ return alert('Ошибка: ' + e.message); }
+  }catch(e){ toast('Не удалось сохранить товар: ' + e.message, true); return; }
 
   resetProductForm();
   updateCategoryList();
@@ -1174,11 +1359,25 @@ function updateCategoryList(){
   if(dl) dl.innerHTML = cats.map(c => `<option value="${esc(c)}">`).join('');
 }
 
+let productFilter = '';
+
 function renderList(){
   const list = $('list');
   if(!list) return;
-  if(!products.length){ list.innerHTML = '<div class="empty">Товаров пока нет</div>'; return; }
-  list.innerHTML = products.map((p, i) => `
+  if(!products.length){ list.innerHTML = '<div class="empty">Товаров пока нет.<br>Добавьте первый в форме выше.</div>'; return; }
+
+  // Фильтр только показывает подмножество — порядок и стрелки перемещения
+  // по-прежнему считаются от полного списка, иначе «выше» двигало бы не туда.
+  const visible = productFilter
+    ? products.filter(p => (p.name + ' ' + (p.category || '')).toLowerCase().includes(productFilter))
+    : products;
+
+  if(!visible.length){
+    list.innerHTML = `<div class="empty">Ничего не найдено по запросу «${esc(productFilter)}»</div>`;
+    return;
+  }
+
+  list.innerHTML = visible.map(p => { const i = products.indexOf(p); return `
     <div class="row ${p.hidden ? 'hidden-prod' : ''}">
       <div class="thumb">${(p.thumbs && p.thumbs[0]) || (p.images && p.images[0])
         ? `<img src="/api/image?id=${encodeURIComponent((p.thumbs && p.thumbs[0]) || p.images[0])}">` : PLACEHOLDER_SVG}</div>
@@ -1194,14 +1393,15 @@ function renderList(){
         </div>
       </div>
       <div class="actions">
-        <button class="icon-toggle" data-id="${p.id}" data-act="up" title="Выше" ${i===0?'disabled':''}>↑</button>
-        <button class="icon-toggle ${p.featured ? 'on' : ''}" data-id="${p.id}" data-act="star" title="Хит">${STAR_SVG}</button>
+        <button class="icon-toggle" data-id="${p.id}" data-act="up" title="Поднять выше" ${i===0?'disabled':''}>↑</button>
+        <button class="icon-toggle" data-id="${p.id}" data-act="down" title="Опустить ниже" ${i===products.length-1?'disabled':''}>↓</button>
+        <button class="icon-toggle ${p.featured ? 'on' : ''}" data-id="${p.id}" data-act="star" title="Пометить как хит">${STAR_SVG}</button>
         <button class="icon-toggle" data-id="${p.id}" data-act="edit" title="Изменить">${EDIT_SVG}</button>
-        <button class="icon-toggle ${p.hidden ? 'on' : ''}" data-id="${p.id}" data-act="hide" title="Скрыть с витрины">${EYE_OFF_SVG}</button>
-        <button class="icon-toggle" data-id="${p.id}" data-act="publish" title="В канал" style="color:var(--accent-2)">${SEND_SVG}</button>
+        <button class="icon-toggle ${p.hidden ? 'on' : ''}" data-id="${p.id}" data-act="hide" title="${p.hidden ? 'Вернуть на витрину' : 'Убрать с витрины'}">${EYE_OFF_SVG}</button>
+        <button class="icon-toggle" data-id="${p.id}" data-act="publish" title="Опубликовать в канал" style="color:var(--accent-2)">${SEND_SVG}</button>
         <button class="icon-toggle" data-id="${p.id}" data-act="delete" title="Удалить" style="color:var(--danger)">${TRASH_SVG}</button>
       </div>
-    </div>`).join('');
+    </div>`; }).join('');
 
   const on = (act, fn) => list.querySelectorAll(`[data-act=${act}]`).forEach(el => el.onclick = () => fn(Number(el.dataset.id), el));
   on('stock', editStock);
@@ -1210,15 +1410,21 @@ function renderList(){
   on('edit',  editProduct);
   on('publish', publishProduct);
   on('delete', removeProduct);
-  on('up', moveUp);
+  on('up', id => moveProduct(id, -1));
+  on('down', id => moveProduct(id, +1));
 }
 
-async function moveUp(id){
+async function moveProduct(id, delta){
   const i = products.findIndex(p => p.id === id);
-  if(i <= 0) return;
-  [products[i-1], products[i]] = [products[i], products[i-1]];
+  const j = i + delta;
+  if(i === -1 || j < 0 || j >= products.length) return;
+  [products[i], products[j]] = [products[j], products[i]];
   renderList();
-  await api('/api/admin/reorder', { method:'POST', body: JSON.stringify({ ids: products.map(p=>p.id) }) });
+  try{
+    await api('/api/admin/reorder', { method:'POST', body: JSON.stringify({ ids: products.map(p=>p.id) }) });
+  }catch(e){
+    toast('Порядок не сохранился: ' + e.message, true);
+  }
 }
 
 async function patchProduct(id, patch){
@@ -1226,7 +1432,7 @@ async function patchProduct(id, patch){
   Object.assign(p, patch);
   renderList();
   try{ await api('/api/admin/products', { method:'PUT', body: JSON.stringify({ id, ...patch }) }); }
-  catch(e){ alert('Не сохранилось: ' + e.message); }
+  catch(e){ toast('Не сохранилось: ' + e.message, true); }
 }
 
 async function publishProduct(id, btn){
@@ -1238,7 +1444,7 @@ async function publishProduct(id, btn){
     btn.innerHTML = '✓';
     setTimeout(() => { btn.innerHTML = original; btn.disabled = false; }, 1400);
     return;
-  }catch(e){ alert('Не удалось опубликовать: ' + e.message); }
+  }catch(e){ toast('Не удалось опубликовать: ' + e.message, true); }
   btn.innerHTML = original;
   btn.disabled = false;
 }
@@ -1260,7 +1466,7 @@ function editStock(id){
 }
 
 async function removeProduct(id){
-  if(!confirm('Удалить товар? Фотографии тоже будут стёрты с сервера.')) return;
+  if(!await confirmDialog('Удалить товар? Фотографии тоже будут стёрты с сервера.')) return;
   await api('/api/admin/products?id=' + id, { method:'DELETE' });
   products = products.filter(x => x.id !== id);
   updateCategoryList();
@@ -1277,7 +1483,7 @@ async function saveSettings(){
     $('saveStatus').textContent = 'Сохранено ✓';
     setTimeout(() => { $('savebar').classList.remove('show'); }, 1200);
     applyTheme(settings.theme);
-  }catch(e){ alert('Не удалось сохранить: ' + e.message); }
+  }catch(e){ toast('Не удалось сохранить: ' + e.message, true); }
   btn.disabled = false;
 }
 
@@ -1294,7 +1500,7 @@ async function onLogoSelected(e){
     preview.innerHTML = `<img src="${thumb}">`;
     refreshPreview();
   }catch(err){
-    alert('Не удалось загрузить логотип: ' + err.message);
+    toast('Не удалось загрузить логотип: ' + err.message, true);
     preview.innerHTML = PLACEHOLDER_SVG;
   }
 }

@@ -9,12 +9,14 @@
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <!-- ?v= бампается при релизе: страхует от промежуточных прокси, которые
      игнорируют no-cache и держат старый shared.js поверх новой разметки -->
-<script src="/shared.js?v=2.1"></script>
+<script src="/theme-core.js?v=2.4"></script>
+<script src="/shared.js?v=2.4"></script>
 <style>
   :root{
     /* дефолты до загрузки настроек — чтобы первый кадр не был белым «мигом» */
     --bg:#0d0d0d; --surface:#161616; --surface-2:#202020;
     --text:#f2efe6; --muted:#8a8880; --accent:#e8341c; --accent-2:#f2c94c; --heart:#e8341c;
+    --on-accent:#ffffff;
     --radius:0px; --bw:1px; --fs:1; --gap:1; --caps:uppercase;
     --font-display:'Oswald',sans-serif;
     --safe-top:0px; --safe-bottom:0px;
@@ -31,6 +33,16 @@
     overflow-x:hidden;
   }
   button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+
+  /* Небольшие кнопки внутри плотных блоков (сердечко и «+» на карточке,
+     счётчик в корзине) визуально остаются компактными, но получают невидимую
+     зону нажатия до 44px — рекомендованный минимум для пальца. Иначе на узких
+     экранах в них попадают через раз, особенно если руки крупные. */
+  .tap44{position:relative}
+  .tap44::before{
+    content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+    width:max(100%,44px);height:max(100%,44px);
+  }
   input,select,textarea{font:inherit;color:inherit;background:none;border:none;outline:none}
   .cap{text-transform:var(--caps)}
 
@@ -63,27 +75,75 @@
   .icon-btn:active{transform:scale(.9)}
   .icon-btn svg{width:18px;height:18px}
   .fav-count{
-    position:absolute;top:2px;right:2px;background:var(--heart);color:#fff;
+    position:absolute;top:2px;right:2px;background:var(--heart);color:var(--on-accent);
     font-size:10px;font-weight:700;min-width:16px;height:16px;border-radius:var(--radius);
     display:flex;align-items:center;justify-content:center;padding:0 3px;
   }
   .fav-count.pulse,.fab-badge.pulse{animation:badgePulse .3s cubic-bezier(.2,.8,.2,1)}
   @keyframes badgePulse{0%{transform:scale(1)}45%{transform:scale(1.4)}100%{transform:scale(1)}}
+  /* Аватарка одновременно работает кнопкой меню, но выглядела просто как фото —
+     непонятно, что по ней вообще можно нажать. Добавляем явный признак меню. */
   .avatar-btn{
-    width:44px;height:44px;border-radius:50%;overflow:hidden;
+    width:44px;height:44px;border-radius:50%;
     border:calc(var(--bw) + .5px) solid var(--accent);flex-shrink:0;transition:transform .15s;
+    position:relative;
   }
   .avatar-btn:active{transform:scale(.9)}
-  .avatar-btn img{width:100%;height:100%;object-fit:cover;display:block}
+  .avatar-btn img{width:100%;height:100%;object-fit:cover;display:block;border-radius:50%}
+  .avatar-caret{
+    position:absolute;right:-3px;bottom:-3px;width:18px;height:18px;
+    background:var(--accent);color:var(--on-accent);border:2px solid var(--bg);border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .avatar-caret svg{width:9px;height:9px}
+  .avatar-btn.menu-dot .avatar-caret{border-radius:50%;width:11px;height:11px}
+  .avatar-btn.menu-dot .avatar-caret svg{display:none}
+  .avatar-btn.menu-none .avatar-caret{display:none}
+  /* подпись «Меню» вместо значка — самый явный вариант для новичков */
+  .avatar-btn.menu-label{width:auto;border-radius:var(--radius);display:flex;align-items:center;gap:7px;padding:0 11px 0 0;overflow:visible}
+  .avatar-btn.menu-label img{width:40px;height:40px}
+  .avatar-btn.menu-label .avatar-caret{position:static;border:none;background:none;color:var(--text);width:auto;height:auto}
+  .avatar-btn.menu-label .avatar-caret::after{
+    content:'Меню';font-family:var(--font-display);font-size:calc(12px * var(--fs));
+    letter-spacing:.4px;text-transform:var(--caps);
+  }
+  .avatar-btn.menu-label .avatar-caret svg{width:9px;height:9px;margin-left:4px}
 
   /* бегущая строка — авангардный акцент, включается настройкой */
   .marquee{
-    overflow:hidden;white-space:nowrap;background:var(--accent);color:var(--bg);
+    overflow:hidden;white-space:nowrap;background:var(--accent);color:var(--on-accent);width:100%;
     font-family:var(--font-display);font-size:calc(12px * var(--fs));font-weight:600;
     letter-spacing:1px;text-transform:var(--caps);padding:6px 0;
   }
-  .marquee span{display:inline-block;padding-left:100%;animation:marquee 18s linear infinite}
-  @keyframes marquee{to{transform:translateX(-100%)}}
+  /* Бесшовная бегущая строка из двух одинаковых копий: трек едет ровно на
+     половину своей ширины и в этот момент вторая копия оказывается там, где
+     была первая — склейки не видно.
+     Было `padding-left:100%` на одном span: текст стартовал за правым краем и
+     на широком экране полоса стояла пустой 71% времени (12.7 с из 18) — именно
+     это и выглядело на десктопе как пустая цветная плашка. На телефоне баг был
+     незаметен, потому что 100% там всего ~360px. */
+  .marquee-track{display:flex;width:max-content;animation:marquee var(--marquee-dur,24s) linear infinite}
+  .marquee-track span{padding-right:2.5em;flex:0 0 auto}
+  .marquee:hover .marquee-track{animation-play-state:paused}
+  @keyframes marquee{to{transform:translateX(-50%)}}
+  /* При выключенных анимациях (theme.animations или системная
+     prefers-reduced-motion — WebView Telegram часто передаёт её от ОС)
+     бесшовная лента замирает на середине слова и выглядит как битый
+     обрезанный текст. В этом случае рисуем статичную строку с многоточием:
+     копия одна, вторая скрыта, обрезки по краям нет. */
+  body.anim-off .marquee-track,
+  body.anim-reduced .marquee-track{animation:none;display:block;width:auto}
+  body.anim-off .marquee-track span[aria-hidden],
+  body.anim-reduced .marquee-track span[aria-hidden]{display:none}
+  body.anim-off .marquee-track span,
+  body.anim-reduced .marquee-track span{
+    display:block;overflow:hidden;text-overflow:ellipsis;padding-right:16px;
+  }
+  @media (prefers-reduced-motion:reduce){
+    .marquee-track{animation:none;display:block;width:auto}
+    .marquee-track span[aria-hidden]{display:none}
+    .marquee-track span{display:block;overflow:hidden;text-overflow:ellipsis;padding-right:16px}
+  }
 
   /* search */
   .search{
@@ -94,17 +154,35 @@
   .search svg{width:16px;height:16px;color:var(--muted);flex-shrink:0}
   .search input{flex:1;color:var(--text);min-width:0}
   .search input::placeholder{color:var(--muted)}
+  .search-clear{
+    width:32px;height:32px;margin:-6px -8px -6px 0;flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;color:var(--muted);
+  }
+  .search-clear[hidden]{display:none}
+  .search-clear svg{width:14px;height:14px}
 
   /* categories */
   .section-title{padding:0 16px;font-family:var(--font-display);font-size:calc(20px * var(--fs));font-weight:600;letter-spacing:.5px;text-transform:var(--caps);margin-bottom:12px}
-  .categories{display:flex;gap:8px;padding:0 16px calc(24px * var(--gap));overflow-x:auto;scrollbar-width:none}
+  .categories{display:flex;gap:8px;padding:0 16px calc(24px * var(--gap));overflow-x:auto;scrollbar-width:none;scroll-snap-type:x proximity;scroll-padding:0 16px}
   .categories::-webkit-scrollbar{display:none}
+  /* Обёртка для скролл-подсказки: градиенты у краёв ленты категорий говорят,
+     что список продолжается. Живут на обёртке, а не на скроллере — иначе
+     уезжали бы вместе с контентом. Включаются классами из syncCatFades. */
+  .cat-wrap{position:relative}
+  .cat-wrap::before,.cat-wrap::after{
+    content:'';position:absolute;top:0;bottom:calc(24px * var(--gap));width:28px;
+    pointer-events:none;opacity:0;transition:opacity .2s;
+  }
+  .cat-wrap::before{left:0;background:linear-gradient(90deg,var(--bg) 15%,transparent)}
+  .cat-wrap::after{right:0;background:linear-gradient(270deg,var(--bg) 15%,transparent)}
+  .cat-wrap.fade-left::before{opacity:1}
+  .cat-wrap.fade-right::after{opacity:1}
   .cat-chip{
-    flex-shrink:0;padding:11px 16px;border:var(--bw) solid var(--surface-2);background:transparent;border-radius:var(--radius);
+    flex-shrink:0;scroll-snap-align:start;padding:11px 16px;border:var(--bw) solid var(--surface-2);background:transparent;border-radius:var(--radius);
     font-family:var(--font-display);font-size:calc(12px * var(--fs));font-weight:600;letter-spacing:.5px;text-transform:var(--caps);
     color:var(--muted);white-space:nowrap;transition:background .15s,color .15s,border-color .15s;
   }
-  .cat-chip.active{background:var(--accent);border-color:var(--accent);color:var(--bg)}
+  .cat-chip.active{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
 
   /* products */
   .products-head{display:flex;justify-content:space-between;align-items:center;padding:0 16px;margin-bottom:10px;gap:10px}
@@ -137,7 +215,7 @@
   .card-fav svg{width:16px;height:16px;color:#fff}
   .card-fav.active svg{color:var(--heart)}
   .featured-badge{
-    position:absolute;top:10px;left:-6px;background:var(--accent);color:var(--text);
+    position:absolute;top:10px;left:-6px;background:var(--accent);color:var(--on-accent);
     font-family:var(--font-display);font-size:10px;font-weight:600;letter-spacing:.5px;text-transform:var(--caps);
     padding:3px 10px;box-shadow:2px 2px 0 var(--bg);z-index:1;
     animation:stampIn .35s cubic-bezier(.2,.8,.2,1) both;animation-delay:.15s;
@@ -149,7 +227,12 @@
      иначе длинные наименования ломали высоту ряда в сетке. */
   .card-body{padding:calc(10px * var(--gap)) 12px calc(12px * var(--gap));display:flex;justify-content:space-between;align-items:flex-end;gap:8px}
   .card-info{min-width:0;flex:1}
-  .card-price{font-family:var(--font-display);font-size:calc(17px * var(--fs));color:var(--accent-2);font-weight:600;letter-spacing:.2px;line-height:1.1}
+  .card-price{
+    font-family:var(--font-display);font-size:calc(17px * var(--fs));color:var(--accent-2);font-weight:600;letter-spacing:.2px;line-height:1.1;
+    /* цена и старая цена всегда в одну строку: иначе в узкой колонке старая
+       цена падает на вторую строку и висит чужеродным серым блоком */
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
   .card-name{
     font-size:calc(13px * var(--fs));font-weight:500;margin-top:5px;line-height:1.35;color:var(--muted);
     display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
@@ -216,12 +299,12 @@
   .fav-remove{width:44px;height:44px;background:var(--surface);display:flex;align-items:center;justify-content:center;flex-shrink:0;border-radius:var(--radius)}
   .fav-remove svg{width:14px;height:14px;color:var(--muted)}
   .empty{text-align:center;color:var(--muted);font-size:calc(13px * var(--fs));padding:40px 16px;line-height:1.6;white-space:pre-line}
-  .empty-action{margin-top:16px;display:inline-block;padding:12px 22px;background:var(--accent);color:var(--text);font-family:var(--font-display);text-transform:var(--caps);font-size:calc(13px * var(--fs));border-radius:var(--radius)}
+  .empty-action{margin-top:16px;display:inline-block;padding:12px 22px;background:var(--accent);color:var(--on-accent);font-family:var(--font-display);text-transform:var(--caps);font-size:calc(13px * var(--fs));border-radius:var(--radius)}
 
   /* cart fab */
   .fab-cart{
     position:fixed;right:16px;bottom:calc(20px + var(--safe-bottom));width:56px;height:56px;
-    background:var(--accent);color:var(--text);display:flex;align-items:center;justify-content:center;
+    background:var(--accent);color:var(--on-accent);display:flex;align-items:center;justify-content:center;
     box-shadow:3px 3px 0 rgba(0,0,0,.5);z-index:15;transition:transform .15s;border-radius:var(--radius);
   }
   .fab-cart:active{transform:scale(.9)}
@@ -233,7 +316,7 @@
   }
 
   .card-add{
-    width:36px;height:36px;background:var(--accent);color:var(--text);border-radius:var(--radius);
+    width:36px;height:36px;background:var(--accent);color:var(--on-accent);border-radius:var(--radius);
     display:flex;align-items:center;justify-content:center;flex-shrink:0;
   }
   .card-add svg{width:14px;height:14px}
@@ -323,20 +406,58 @@
   .field textarea{resize:vertical;min-height:66px}
   .field.invalid input,.field.invalid textarea{border-color:var(--accent)}
   .field-error{color:var(--accent);font-size:calc(11px * var(--fs));margin-top:4px}
+  /* Состав заказа на финальном экране. Раньше заказ был только внутри кнопки
+     «Скопировать» — покупатель не видел, что именно он отправил, и не мог
+     перепроверить сумму или адрес, не выходя из мини-аппа. */
+  .order-receipt{
+    background:var(--surface-2);border-radius:var(--radius);padding:14px;margin-bottom:16px;
+    font-family:inherit;font-size:calc(13px * var(--fs));line-height:1.55;color:var(--text);
+    white-space:pre-wrap;word-break:break-word;max-height:220px;overflow-y:auto;
+  }
+  /* экран возврата из платёжного сервиса */
+  .pay-return{position:fixed;inset:0;z-index:70;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:24px}
+  .pay-card{max-width:380px;width:100%;text-align:center;background:var(--surface);border-radius:var(--radius);
+    border:var(--bw) solid var(--surface-2);border-top:calc(var(--bw) * 3) solid var(--accent);padding:32px 24px}
+  .pay-card.bad{border-top-color:var(--muted)}
+  .pay-icon{width:56px;height:56px;margin:0 auto 16px;border-radius:50%;display:flex;align-items:center;
+    justify-content:center;font-size:28px;background:var(--accent);color:var(--bg)}
+  .pay-card.bad .pay-icon{background:var(--surface-2);color:var(--muted)}
+  .pay-title{font-family:var(--font-display);font-size:calc(20px * var(--fs));text-transform:var(--caps);margin-bottom:10px}
+  .pay-text{font-size:calc(14px * var(--fs));color:var(--muted);line-height:1.55;margin-bottom:12px;white-space:pre-line}
+  .pay-order{font-size:calc(12px * var(--fs));color:var(--muted);opacity:.7;margin-bottom:20px}
+
+  /* промокод */
+  .promo-row{display:flex;gap:8px}
+  .promo-row input{flex:1;text-transform:uppercase}
+  .promo-apply{width:auto;flex:0 0 auto;margin:0;padding:0 18px;min-height:48px;white-space:nowrap}
+  .promo-msg{font-size:calc(12px * var(--fs));margin-top:6px;line-height:1.4;color:var(--accent-2)}
+  .promo-msg.err{color:var(--accent)}
+
   .check-row{display:flex;gap:10px;align-items:flex-start;margin-bottom:14px;font-size:calc(13px * var(--fs));color:var(--muted);line-height:1.4}
   .check-row input{width:20px;height:20px;flex-shrink:0;accent-color:var(--accent)}
 
   /* cart sheet */
   .cart-list{display:flex;flex-direction:column;gap:10px;margin-bottom:18px}
   .cart-row{display:flex;align-items:center;gap:12px;background:var(--surface-2);border-radius:var(--radius);padding:10px}
+  .cart-controls{display:flex;align-items:center;gap:6px;flex-shrink:0}
   .qty{display:flex;align-items:center;gap:6px;background:var(--surface);padding:4px;border-radius:var(--radius)}
-  .qty button{width:32px;height:32px;font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center}
-  .qty span{font-family:var(--font-display);font-size:calc(13px * var(--fs));min-width:18px;text-align:center}
+  .qty button{width:36px;height:36px;font-size:18px;font-weight:700;display:flex;align-items:center;justify-content:center}
+  .qty span{font-family:var(--font-display);font-size:calc(14px * var(--fs));min-width:20px;text-align:center}
+  .cart-remove{width:36px;height:36px;display:flex;align-items:center;justify-content:center;color:var(--muted);border-radius:var(--radius)}
+  .cart-remove svg{width:16px;height:16px}
+  .cart-remove:active{color:var(--accent)}
+  /* цена за штуку мелким шрифтом под суммой строки */
+  .per-unit{display:block;font-size:calc(11px * var(--fs));color:var(--muted);font-family:inherit;margin-top:2px}
+  .toast-action{
+    margin-left:12px;color:var(--accent-2);font-weight:700;text-decoration:underline;
+    pointer-events:auto;font-size:inherit;
+  }
+  .toast.err .toast-action{color:var(--bg)}
   .cart-total{display:flex;justify-content:space-between;font-family:var(--font-display);font-size:calc(17px * var(--fs));font-weight:600;padding:16px 4px;border-top:var(--bw) solid var(--surface-2);animation:popIn .22s cubic-bezier(.2,.8,.2,1) both}
   @keyframes popIn{from{opacity:0;transform:scale(.85)}to{opacity:1;transform:scale(1)}}
   .cart-total span:last-child{color:var(--accent-2)}
   .checkout-btn{
-    width:100%;padding:16px;background:var(--accent);color:var(--text);min-height:52px;border-radius:var(--radius);
+    width:100%;padding:16px;background:var(--accent);color:var(--on-accent);min-height:52px;border-radius:var(--radius);
     font-family:var(--font-display);letter-spacing:.5px;text-transform:var(--caps);
     font-weight:600;font-size:calc(14px * var(--fs));text-align:center;transition:opacity .15s;
   }
@@ -353,11 +474,80 @@
   @media (min-width:1000px){
     body{max-width:1100px;margin:0 auto}
     .grid{--cols:4}
-    .fab-cart{right:calc(50vw - 550px + 16px)}
+    .fab-cart{right:max(16px,calc(50vw - 550px + 16px))}
   }
-  @media (min-width:560px){
+  /* Планшет: шторка перестаёт быть во всю ширину, но всё ещё выезжает снизу —
+     на таком размере это ещё читается как родной жест. */
+  @media (min-width:560px) and (max-width:899px){
     .overlay .sheet{left:50%;right:auto;width:480px;transform:translate(-50%,100%)}
     .overlay.open .sheet{transform:translate(-50%,0)}
+  }
+
+  /* Десктоп: снизу выезжать нечему — это не телефон. Шторка становится обычным
+     центрированным диалогом. Раньше на мониторе 1440px модалка шириной 480px
+     висела приклеенной к нижнему краю — выглядело как недоделанный мобильный
+     макет, потому что им и было. */
+  @media (min-width:900px){
+    .overlay{display:flex;align-items:center;justify-content:center;padding:32px}
+    .overlay .sheet{
+      position:relative;left:auto;right:auto;bottom:auto;
+      width:min(560px,100%);max-height:100%;
+      border:var(--bw) solid var(--surface-2);border-top:calc(var(--bw) * 3) solid var(--accent);
+      transform:translateY(12px) scale(.985);opacity:0;
+      transition:transform .22s cubic-bezier(.2,.8,.2,1),opacity .18s;
+    }
+    .overlay.open .sheet{transform:none;opacity:1}
+    .sheet-scroll{max-height:min(76vh,720px)}
+    .sheet-close{top:14px;right:14px}
+    /* Поиск переезжает в строку шапки (перенос делает JS, см. placeSearch).
+       Раньше шапка на десктопе была почти пустой: логотип слева, две иконки
+       у правого края и 900px воздуха между ними, а поиск отдельной строкой
+       растягивался на всю колонку. */
+    header .search{margin:0 20px;flex:1 1 auto;max-width:480px}
+    .logo{flex:0 0 auto}
+    /* курсор на десктопе есть — показываем отклик на наведение */
+    .card{transition:transform .12s,border-color .12s}
+    .card:hover{border-color:var(--accent)}
+    .cat-chip:hover{color:var(--text);border-color:var(--muted)}
+    .menu-item:hover{color:var(--accent)}
+
+    /* Категории переносятся, а не прокручиваются вбок. Горизонтальная лента
+       рассчитана на палец: мышью её листать нечем — полоса прокрутки скрыта,
+       и часть категорий на десктопе была просто недоступна. */
+    .categories{flex-wrap:wrap;overflow:visible}
+
+    /* Карточка товара в две колонки: фото слева, описание и кнопки справа.
+       Модалка 560px с фото 4:3 оставляла половину высоты экрана пустой, а
+       описание уезжало под сгиб. */
+    #detailOverlay .sheet{width:min(920px,100%)}
+    #detailOverlay .sheet-scroll{
+      display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);
+      column-gap:30px;align-content:start;grid-auto-rows:min-content;
+    }
+    /* Медиа-блок занимает всю высоту левой колонки. Без этого grid растягивал
+       название на высоту фото (332px вместо 30) и описание уезжало вниз. */
+    /* span, а не «1 / -1»: в неявной сетке -1 указывает на конец ЯВНОЙ сетки,
+       то есть на первый же ряд, и блок переставал перекрывать колонку.
+       Справа максимум шесть элементов — восьми рядов хватает с запасом. */
+    #detailOverlay .detail-media{grid-column:1;grid-row:1 / span 8;align-self:start}
+    #detailOverlay .detail-name,
+    #detailOverlay .detail-price,
+    #detailOverlay .detail-stock,
+    #detailOverlay .detail-desc,
+    #detailOverlay .detail-actions,
+    #detailOverlay #detailCartBtn{grid-column:2}
+    /* описание больше не обрезается по высоте — места хватает */
+    #detailOverlay .detail-desc{max-height:none}
+  }
+
+  /* Совсем широкие экраны: не растягиваем текст на всю ширину, но и не жмём
+     каталог в узкую колонку с пустотой по бокам. */
+  @media (min-width:1400px){
+    body{max-width:1320px}
+    .grid{--cols:5}
+    /* FAB считается от той же max-width, что и колонка контента, иначе на
+       широком мониторе он уезжает от каталога в пустоту */
+    .fab-cart{right:max(16px,calc(50vw - 660px + 16px))}
   }
   @media (prefers-reduced-motion:reduce){ *{animation-duration:.01ms!important;transition-duration:.01ms!important} }
 </style>
@@ -375,22 +565,30 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8Z"/></svg>
       <span class="fav-count" id="favCount" style="display:none">0</span>
     </button>
-    <button class="avatar-btn" id="profileBtn" aria-label="Профиль">
+    <button class="avatar-btn" id="profileBtn" aria-label="Профиль и меню" aria-haspopup="menu">
       <img id="avatarImg" src="" alt="">
+      <span class="avatar-caret" id="avatarCaret" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m6 9 6 6 6-6"/></svg>
+      </span>
     </button>
   </div>
 </header>
 <div class="tagline" id="tagline" style="display:none"></div>
-<div class="marquee" id="marquee" style="display:none"><span></span></div>
+<div class="marquee" id="marquee" style="display:none">
+  <div class="marquee-track" id="marqueeTrack"><span></span><span aria-hidden="true"></span></div>
+</div>
 
 <div class="search" id="searchBox">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-  <input type="text" id="searchInput" placeholder="Поиск товаров...">
+  <input type="text" id="searchInput" placeholder="Поиск товаров..." enterkeyhint="search" autocomplete="off">
+  <button class="search-clear" id="searchClear" aria-label="Очистить поиск" hidden>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
+  </button>
 </div>
 
 <div id="categoriesSection">
   <div class="section-title">Категории</div>
-  <div class="categories" id="categories"></div>
+  <div class="cat-wrap"><div class="categories" id="categories"></div></div>
 </div>
 
 <div class="products-head">
@@ -458,11 +656,15 @@
   <div class="sheet" id="detailSheet">
     <button class="sheet-close" data-close aria-label="Закрыть"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
     <div class="sheet-scroll">
-      <div class="detail-gallery" id="detailGallery">
-        <div class="detail-gallery-track" id="detailGalleryTrack"></div>
-        <div class="gallery-counter" id="galleryCounter" style="display:none"></div>
+      <!-- обёртка нужна для десктопной раскладки: она занимает всю высоту
+           левой колонки, иначе grid растягивал бы название на высоту фото -->
+      <div class="detail-media">
+        <div class="detail-gallery" id="detailGallery">
+          <div class="detail-gallery-track" id="detailGalleryTrack"></div>
+          <div class="gallery-counter" id="galleryCounter" style="display:none"></div>
+        </div>
+        <div class="detail-gallery-dots" id="detailGalleryDots"></div>
       </div>
-      <div class="detail-gallery-dots" id="detailGalleryDots"></div>
       <div class="detail-name" id="detailName"></div>
       <div class="detail-price" id="detailPrice"></div>
       <div class="detail-stock" id="detailStock" style="display:none"></div>
@@ -536,6 +738,32 @@ tg?.onEvent('safeAreaChanged', applySafeArea);
 tg?.onEvent('contentSafeAreaChanged', applySafeArea);
 tg?.onEvent('viewportChanged', applyViewport);
 window.addEventListener('resize', applyViewport);
+// Бегущая строка и скролл-подсказка категорий зависят от ширины окна —
+// пересчитываем после поворота телефона или ресайза десктопного окна.
+// Дебаунс, чтобы не пересчитывать лейаут на каждый пиксель.
+let uiResizeT;
+window.addEventListener('resize', () => {
+  clearTimeout(uiResizeT);
+  uiResizeT = setTimeout(() => { if(settings) sizeMarquee(settings.theme); syncCatFades(); }, 150);
+});
+
+// colorScheme ('light' | 'dark') — дублируем его в CSS color-scheme, чтобы
+// нативные контролы браузера (скроллбары, автозаполнение инпутов) рендерились
+// в той же схеме, что и сам Telegram, а не спорили с ней.
+function syncColorScheme(){
+  if(!tg?.colorScheme) return;
+  document.documentElement.style.colorScheme = tg.colorScheme;
+}
+syncColorScheme();
+// По документации themeChanged приходит при любой смене темы в Telegram
+// (включая ночной режим), а новые цвета читаются из this.themeParams/colorScheme.
+// Перекрашиваемся только в режиме colorScheme=telegram — чужую тему продавца
+// тема клиента перезаписывать не должна.
+tg?.onEvent('themeChanged', () => {
+  syncColorScheme();
+  if(!settings || settings.theme.colorScheme !== 'telegram') return;
+  applySettings(settings);
+});
 
 // --- данные ---
 const user = tg?.initDataUnsafe?.user || { first_name:"Гость", username:"guest", photo_url:"" };
@@ -569,6 +797,60 @@ function restoreState(){
 }
 restoreState();
 
+// Тема применяется ДО первого кадра. Раньше витрина рисовалась дефолтными
+// переменными из :root (тёмный бруталист), и только после ответа /api/settings
+// перекрашивалась — на светлых темах это была заметная тёмная вспышка.
+// Кэшируем последнюю применённую тему и ставим её синхронно на старте:
+// сервер потом всё равно пришлёт актуальную, но моргать уже нечему.
+const LS_THEME = 'shop_theme_v2';
+function cacheTheme(theme, brand){
+  try{ localStorage.setItem(LS_THEME, JSON.stringify({ theme, brand })); }catch(e){}
+}
+(function applyBootTheme(){
+  // Основной путь: сервер уже вписал переменные в <style id="bootTheme">, здесь
+  // только доносим классы-модификаторы, которые живут на <body>.
+  const boot = document.documentElement.dataset.bootClass;
+  if(boot) boot.split(' ').forEach(c => c && document.body.classList.add(c));
+
+  // Режим «подстроиться под тему Telegram»: сервер не знает цвета клиента и
+  // вписал в bootTheme палитру продавца. Перекрываем цветовые переменные прямо
+  // из themeParams на первом кадре — только цветовые, через applyTheme нельзя:
+  // неполная тема уехала бы в дефолты пресета и затёрла радиусы и шрифты.
+  if(document.documentElement.dataset.bootScheme === 'telegram' && tg?.themeParams?.bg_color){
+    const tp = tg.themeParams;
+    const st = document.documentElement.style;
+    // Ставим только реально присланные ключи: отсутствующий цвет не должен
+    // записывать в переменную строку 'undefined' и ломать палитру.
+    const setIf = (k, v) => { if(v) st.setProperty(k, v); };
+    setIf('--bg', tp.bg_color);
+    setIf('--surface', tp.secondary_bg_color);
+    setIf('--surface-2', tp.secondary_bg_color);
+    setIf('--text', tp.text_color);
+    setIf('--muted', tp.hint_color);
+    setIf('--accent', tp.button_color);
+    setIf('--accent-2', tp.link_color);
+    setIf('--heart', tp.button_color);
+    if(tp.button_color) st.setProperty('--on-accent', contrastOnColor(document.documentElement, tp.button_color));
+  }
+
+  // Запасной путь — для превью в админке и для случая, когда HTML пришёл
+  // из кэша прокси без подстановки.
+  if(document.getElementById('bootTheme')) return;
+  try{
+    const saved = JSON.parse(localStorage.getItem(LS_THEME) || 'null');
+    if(!saved || !saved.theme) return;
+    // в режиме telegram подмешиваем цвета клиента уже на первом кадре,
+    // чтобы кэш-тема совпала с тем, что применится после /api/settings
+    applyTheme(Object.assign({}, saved.theme, telegramThemeMix(saved.theme) || {}));
+    document.documentElement.style.setProperty('--cols', saved.theme.gridColumns);
+    document.documentElement.style.setProperty('--ratio',
+      saved.theme.imageRatio === 'square' ? '1/1' : saved.theme.imageRatio === 'portrait' ? '3/4' : '4/3');
+    document.body.classList.toggle('grain', !!saved.theme.grain);
+    document.body.classList.toggle('diagonal', !!saved.theme.diagonal);
+    if(saved.brand && saved.brand.shopName) document.title = saved.brand.shopName;
+  }catch(e){ /* кэш повреждён — просто стартуем с дефолтов */ }
+})();
+
 function thumbHTML(p, extra=''){
   const first = (p.thumbs && p.thumbs[0]) || (p.images && p.images[0]);
   return first ? `<img src="/api/image?id=${encodeURIComponent(first)}" alt="" loading="lazy" ${extra}>` : PLACEHOLDER_SVG;
@@ -599,13 +881,51 @@ function renderCategories(){
   document.querySelectorAll('.cat-chip').forEach(chip=>{
     chip.onclick = () => { activeCategory = chip.dataset.cat; haptic.sel(); renderCategories(); renderGrid(); };
   });
+  syncCatFades();
+}
+
+// Скролл-подсказка ленты категорий: градиент у края виден, только пока туда
+// есть что скроллить. Без него на телефоне лента молча обрезается краем
+// экрана — непонятно, что дальше есть категории.
+function syncCatFades(){
+  const el = document.getElementById('categories');
+  const wrap = el && el.parentElement;
+  if(!wrap) return;
+  const rest = el.scrollWidth - el.clientWidth;
+  wrap.classList.toggle('fade-right', rest > 2 && el.scrollLeft < rest - 2);
+  wrap.classList.toggle('fade-left', el.scrollLeft > 2);
+}
+document.getElementById('categories').addEventListener('scroll', syncCatFades, {passive:true});
+
+// Размеры бегущей строки. Одна копия должна быть шире экрана, иначе при
+// прокрутке на -50% появится пустой хвост. Зовётся и при загрузке настроек,
+// и при ресайзе: раньше ширина фиксировалась один раз, и после поворота
+// телефона лента ехала с хвостом.
+function sizeMarquee(t){
+  const mq = document.getElementById('marquee');
+  if(!(t.marquee && t.marqueeText)){ mq.style.display = 'none'; return; }
+  mq.style.display = '';
+  const unit = t.marqueeText + '   ✦   ';
+  const reps = Math.max(2, Math.ceil(window.innerWidth / Math.max(60, unit.length * 9)));
+  const chunk = unit.repeat(reps);
+  mq.querySelectorAll('.marquee-track span').forEach(el => { el.textContent = chunk; });
+  // Скорость постоянная в пикселях в секунду: иначе на широком экране строка
+  // ползёт заметно быстрее, чем на телефоне, при одной и той же длительности.
+  // Замер синхронный, а не в requestAnimationFrame: rAF не вызывается вообще,
+  // пока вкладка неактивна, и строка осталась бы с дефолтной скоростью.
+  const track = document.getElementById('marqueeTrack');
+  const half = track.scrollWidth / 2;   // чтение scrollWidth само дожимает лейаут
+  if(half > 0) track.style.setProperty('--marquee-dur', Math.max(8, half / 60).toFixed(1) + 's');
 }
 
 function getFilteredProducts(){
   let list = products.filter(p => {
     if(p.hidden) return false;
     const matchesCategory = activeCategory === 'Все' || p.category === activeCategory;
-    const matchesSearch = !searchQuery || p.name.toLowerCase().includes(searchQuery) || (p.description||'').toLowerCase().includes(searchQuery);
+    // ищем и по категории тоже: запрос «плакаты» логично должен находить всё
+    // из этой категории, а не только товары с этим словом в названии
+    const haystack = `${p.name} ${p.description || ''} ${p.category || ''}`.toLowerCase();
+    const matchesSearch = !searchQuery || haystack.includes(searchQuery);
     return matchesCategory && matchesSearch;
   });
   if(sortMode === 'price-asc') list = [...list].sort((a,b)=>a.price-b.price);
@@ -614,10 +934,43 @@ function getFilteredProducts(){
   return list;
 }
 
-document.getElementById('searchInput').oninput = debounce(e => {
+// На десктопе поиск живёт в строке шапки, на телефоне — отдельной строкой под
+// ней. Переносим сам узел, а не дублируем разметку: обработчики, значение поля
+// и состояние крестика остаются теми же, перерисовывать ничего не нужно.
+const mqWide = window.matchMedia('(min-width:900px)');
+function placeSearch(){
+  const box = document.getElementById('searchBox');
+  const header = document.getElementById('appHeader');
+  const icons = header.querySelector('.header-icons');
+  if(mqWide.matches){
+    if(box.parentElement !== header) header.insertBefore(box, icons);
+  } else if(box.parentElement === header){
+    // Возвращаем на исходное место — прямо перед блоком категорий. Привязка
+    // к нему, а не к шапке: между ними ещё подзаголовок и бегущая строка,
+    // и вставка «после шапки» ломала бы их порядок.
+    document.getElementById('categoriesSection').before(box);
+  }
+}
+placeSearch();
+mqWide.addEventListener('change', placeSearch);
+
+const searchInput = document.getElementById('searchInput');
+const searchClear = document.getElementById('searchClear');
+searchInput.oninput = debounce(e => {
   searchQuery = e.target.value.trim().toLowerCase();
+  searchClear.hidden = !e.target.value;
   renderGrid();
 }, 200);
+// крестик прячем/показываем сразу, не дожидаясь debounce — иначе он «залипает»
+searchInput.addEventListener('input', e => { searchClear.hidden = !e.target.value; });
+searchClear.onclick = () => {
+  searchInput.value = '';
+  searchQuery = '';
+  searchClear.hidden = true;
+  haptic.tap();
+  renderGrid();
+  searchInput.focus();
+};
 document.getElementById('sortSelect').onchange = e => { sortMode = e.target.value; haptic.sel(); renderGrid(); };
 
 function renderSkeletons(){
@@ -671,7 +1024,7 @@ function renderGrid(){
       <div class="card-img" data-id="${p.id}" data-open="1">
         ${thumbHTML(p)}
         ${p.featured && !soldOut && c.showFeaturedBadge ? `<span class="featured-badge">${esc(p.badge || c.featuredLabel)}</span>` : ''}
-        ${m.enableFavorites ? `<button class="card-fav ${favorites.has(p.id)?'active':''}" data-id="${p.id}" aria-label="В избранное">
+        ${m.enableFavorites ? `<button class="card-fav tap44 ${favorites.has(p.id)?'active':''}" data-id="${p.id}" aria-label="В избранное">
           <svg viewBox="0 0 24 24" fill="${favorites.has(p.id)?'currentColor':'none'}" stroke="currentColor" stroke-width="2"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8Z"/></svg>
         </button>` : ''}
         ${c.showStock ? (soldOut ? '<span class="stock-badge">Раскуплено</span>' : low ? `<span class="stock-badge">Осталось ${p.stock}</span>` : '') : ''}
@@ -681,7 +1034,7 @@ function renderGrid(){
           <div class="card-price">${priceHTML(p)}</div>
           <div class="card-name">${esc(p.name)}</div>
         </div>
-        ${showAdd ? `<button class="card-add" data-id="${p.id}" ${soldOut ? 'disabled' : ''} aria-label="В корзину">
+        ${showAdd ? `<button class="card-add tap44" data-id="${p.id}" ${soldOut ? 'disabled' : ''} aria-label="В корзину">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
         </button>` : ''}
       </div>
@@ -980,7 +1333,7 @@ function renderFavList(){
         <div class="fav-name">${esc(p.name)}</div>
         <div class="fav-price">${p.stock === 0 ? 'Раскуплено' : priceHTML(p)}</div>
       </div>
-      <button class="fav-remove" data-id="${p.id}" data-remove="1" aria-label="Убрать">
+      <button class="fav-remove tap44" data-id="${p.id}" data-remove="1" aria-label="Убрать">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
       </button>
     </div>
@@ -1016,22 +1369,35 @@ function renderCart(){
   const list = document.getElementById('cartList');
   const footer = document.getElementById('cartFooter');
   if(!ids.length){
-    list.innerHTML = `<div class="empty">Корзина пуста —\nдобавляйте товары кнопкой «+»</div>`;
+    list.innerHTML = `<div class="empty">Здесь пока пусто.\nНажмите «+» на товаре, чтобы добавить его сюда.<div class="empty-action" id="cartToCatalog">Перейти к товарам</div></div>`;
     footer.innerHTML = '';
+    const back = document.getElementById('cartToCatalog');
+    if(back) back.onclick = () => closeSheet('cartOverlay');
     return;
   }
   list.innerHTML = ids.map(id=>{
     const p = products.find(x=>x.id===id);
     const qty = cart.get(id);
     const maxed = typeof p.stock === 'number' && qty >= p.stock;
+    // сумма по строке, а не только цена за штуку: при qty>1 покупатель иначе
+    // считает в уме, а на кассе удивляется итогу
+    const lineTotal = p.price * qty;
     return `
     <div class="cart-row">
       <div class="fav-thumb">${thumbHTML(p)}</div>
-      <div class="fav-info"><div class="fav-name">${esc(p.name)}</div><div class="fav-price">${priceHTML(p)}</div></div>
-      <div class="qty">
-        <button data-id="${id}" data-op="-" aria-label="Меньше">−</button>
-        <span>${qty}</span>
-        <button data-id="${id}" data-op="+" ${maxed ? 'disabled' : ''} aria-label="Больше">+</button>
+      <div class="fav-info">
+        <div class="fav-name">${esc(p.name)}</div>
+        <div class="fav-price">${settings.commerce.priceHidden ? esc(settings.commerce.priceHiddenText) : fmt(lineTotal)}${qty > 1 ? `<span class="per-unit">${fmt(p.price)} × ${qty}</span>` : ''}</div>
+      </div>
+      <div class="cart-controls">
+        <div class="qty">
+          <button class="tap44" data-id="${id}" data-op="-" aria-label="Убрать одну штуку">−</button>
+          <span aria-live="polite">${qty}</span>
+          <button class="tap44" data-id="${id}" data-op="+" ${maxed ? 'disabled' : ''} aria-label="Добавить ещё одну">+</button>
+        </div>
+        <button class="cart-remove tap44" data-remove="${id}" aria-label="Удалить «${esc(p.name)}» из корзины" title="Удалить">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6h16z"/></svg>
+        </button>
       </div>
     </div>`;
   }).join('');
@@ -1048,10 +1414,32 @@ function renderCart(){
   list.querySelectorAll('.qty button').forEach(btn=>{
     btn.onclick = () => changeQty(Number(btn.dataset.id), btn.dataset.op);
   });
+  list.querySelectorAll('[data-remove]').forEach(btn=>{
+    btn.onclick = () => removeFromCart(Number(btn.dataset.remove));
+  });
   const msgBtn = document.getElementById('cartMessageBtn');
   if(msgBtn) msgBtn.onclick = messageManagerFromCart;
   const coBtn = document.getElementById('checkoutBtn');
   if(coBtn) coBtn.onclick = openCheckoutForm;
+}
+
+// Удаление одной кнопкой + отмена. Раньше убрать товар можно было только
+// многократным нажатием «−» до нуля — на пяти штуках это пять тапов вслепую.
+let lastRemoved = null;
+function removeFromCart(id){
+  const p = products.find(x => x.id === id);
+  lastRemoved = { id, qty: cart.get(id) };
+  cart.delete(id);
+  haptic.press();
+  updateCartUI();
+  showToast(`«${p ? p.name : 'Товар'}» убран`, false, { label: 'Вернуть', onClick: undoRemove });
+}
+function undoRemove(){
+  if(!lastRemoved) return;
+  cart.set(lastRemoved.id, lastRemoved.qty);
+  lastRemoved = null;
+  haptic.tap();
+  updateCartUI();
 }
 
 function addToCart(id){
@@ -1078,7 +1466,11 @@ function pulse(el){
 }
 
 function updateCartUI(){
-  const count = [...cart.values()].reduce((a,b)=>a+b,0);
+  // Считаем только те позиции, что реально есть в каталоге. Иначе после
+  // удаления товара продавцом у покупателя навсегда оставался бы бейдж
+  // «7 товаров» при итоге за две штуки — корзина восстанавливается из
+  // localStorage и про удалённые id ничего не знает.
+  const count = cartIds().reduce((a, id) => a + (cart.get(id) || 0), 0);
   const badge = document.getElementById('cartCount');
   badge.style.display = count ? 'flex' : 'none';
   badge.textContent = count;
@@ -1095,7 +1487,20 @@ function updateCartUI(){
 const HEX_RE = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
 function themeHex(varName){
   const v = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
-  return HEX_RE.test(v) ? v : undefined;
+  if(!v) return undefined;
+  if(HEX_RE.test(v)) return v;
+  // Продавец мог вписать rgb() или название цвета, а setHeaderColor /
+  // setBackgroundColor / MainButton принимают только hex. Раньше в этом случае
+  // шапка уезжала на ключевое слово 'bg_color' — а это ЦВЕТ ИЗ ТЕМЫ КЛИЕНТА,
+  // у покупателя со светлым Telegram шапка и фон становились белыми.
+  // Разрешаем любой CSS-цвет в hex через скрытый элемент.
+  const probe = document.createElement('i');
+  probe.style.cssText = 'position:absolute;visibility:hidden;color:' + v;
+  document.documentElement.appendChild(probe);
+  const rgb = (getComputedStyle(probe).color.match(/[\d.]+/g) || []).map(Number);
+  probe.remove();
+  if(rgb.length < 3) return undefined;
+  return '#' + rgb.slice(0, 3).map(x => Math.min(255, Math.max(0, Math.round(x))).toString(16).padStart(2, '0')).join('');
 }
 // Нативная MainButton есть только внутри настоящего клиента Telegram. В обычном
 // браузере объект тоже существует, но кнопка не отрисовывается — там нужна своя.
@@ -1141,8 +1546,13 @@ function openBuyLink(rawUrl, text){
     const u = new URL(url);
     isTelegramLink = (u.hostname === 't.me' || u.hostname === 'telegram.me');
     if((isTelegramLink || u.hostname === 'wa.me') && text){
-      u.searchParams.set('text', text);
-      finalUrl = u.toString();
+      // Собираем query вручную. searchParams.set() сериализует по правилам
+      // form-urlencoded и превращает пробелы в «+»; Telegram разбирает
+      // draft_text как обычную percent-строку и показывает плюсы буквально —
+      // из-за этого черновик выглядел пустым или ломаным. encodeURIComponent
+      // даёт %20, который понимают и Telegram, и WhatsApp.
+      const base = u.origin + u.pathname;
+      finalUrl = `${base}?text=${encodeURIComponent(text)}`;
     }
   }catch(e){}
 
@@ -1164,13 +1574,24 @@ function openBuyLink(rawUrl, text){
   } else proceed();
 }
 
-function showToast(msg, isError){
+// action = { label, onClick } — необязательная кнопка прямо в уведомлении,
+// нужна для «Вернуть» после удаления из корзины.
+function showToast(msg, isError, action){
+  document.querySelectorAll('.toast').forEach(t => t.remove()); // не копим стопку
   const el = document.createElement('div');
   el.className = 'toast' + (isError ? ' err' : '');
   el.textContent = msg;
+  if(action){
+    const btn = document.createElement('button');
+    btn.className = 'toast-action';
+    btn.textContent = action.label;
+    btn.onclick = () => { action.onClick(); el.remove(); };
+    el.appendChild(btn);
+  }
   document.body.appendChild(el);
   requestAnimationFrame(() => el.classList.add('show'));
-  setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 300); }, 2400);
+  const life = action ? 5000 : (isError ? 3600 : 2400);
+  setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 300); }, life);
 }
 
 function notifyInquiry(subject){
@@ -1230,6 +1651,7 @@ function selectField(id, label, options){
 }
 
 function openCheckoutForm(){
+  inquiryItem = null; // вход из корзины — оформляем именно корзину, а не заявку
   if(!cartIds().length) return;
   renderCheckoutForm();
   // Корзину закрываем: две шторки одновременно накладывались друг на друга —
@@ -1251,11 +1673,67 @@ function renderCheckoutForm(){
     ${hasDelivery ? selectField('coDelivery','Доставка', c.deliveryMethods) : ''}
     ${hasDelivery && c.askAddress ? `<div class="field"><label>Адрес доставки</label><textarea id="coAddress" placeholder="Город, улица, дом, квартира"></textarea></div>` : ''}
     ${c.askComment ? `<div class="field"><label>Комментарий</label><textarea id="coComment" placeholder="Пожелания к заказу"></textarea></div>` : ''}
+    ${settings.promo && settings.promo.enabled ? `
+      <div class="field promo-field">
+        <label>${esc(settings.promo.label || 'Промокод')}</label>
+        <div class="promo-row">
+          <input id="coPromo" placeholder="Введите код" autocomplete="off" autocapitalize="characters" value="${esc(appliedPromo ? appliedPromo.code : '')}">
+          <button type="button" class="secondary-btn promo-apply" id="coPromoBtn">${appliedPromo ? 'Убрать' : 'Применить'}</button>
+        </div>
+        <div class="promo-msg" id="coPromoMsg">${appliedPromo ? `Скидка ${esc(appliedPromo.label)} — минус ${fmt(appliedPromo.discount)}` : ''}</div>
+      </div>` : ''}
     ${c.requireAgreement ? `<label class="check-row"><input type="checkbox" id="coAgree"><span>${esc(c.agreementText)}</span></label>` : ''}
-    <div class="cart-total" style="border:none;padding-top:0"><span>К оплате</span><span>${settings.commerce.priceHidden ? '—' : fmt(cartTotal())}</span></div>
+    ${appliedPromo ? `<div class="cart-total" style="border:none;padding:0 4px 6px;font-size:calc(14px * var(--fs))"><span style="color:var(--muted)">Сумма</span><span style="color:var(--muted)">${fmt(orderTotal())}</span></div>` : ''}
+    <div class="cart-total" style="border:none;padding-top:0"><span>К оплате</span><span>${settings.commerce.priceHidden ? '—' : fmt(payableTotal())}</span></div>
     <button class="checkout-btn" id="coSubmitBtn">Подтвердить заказ</button>
   `;
   document.getElementById('coSubmitBtn').onclick = submitOrder;
+  const promoBtn = document.getElementById('coPromoBtn');
+  if(promoBtn) promoBtn.onclick = togglePromo;
+}
+
+// --- промокод ---
+// Скидку считает сервер и только он: на клиенте её было бы тривиально подделать,
+// поэтому здесь мы храним лишь то, что сервер уже подтвердил.
+let appliedPromo = null;
+function payableTotal(){
+  return Math.max(0, orderTotal() - (appliedPromo ? appliedPromo.discount : 0));
+}
+
+async function togglePromo(){
+  const input = document.getElementById('coPromo');
+  const msg = document.getElementById('coPromoMsg');
+  const btn = document.getElementById('coPromoBtn');
+
+  if(appliedPromo){                 // кнопка работает как «Убрать»
+    appliedPromo = null;
+    renderCheckoutForm();
+    haptic.tap();
+    return;
+  }
+
+  const code = input.value.trim();
+  if(!code){ input.focus(); return; }
+
+  btn.disabled = true;
+  msg.className = 'promo-msg';
+  msg.textContent = 'Проверяем…';
+  try{
+    const res = await fetch('/api/promo/check', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ code, items: orderItems() }),
+    });
+    const data = await res.json();
+    if(!data.ok) throw new Error(data.error || 'Промокод не найден');
+    appliedPromo = { code: data.code, discount: data.discount, label: data.label };
+    haptic.ok();
+    renderCheckoutForm();           // перерисовываем — обновится и «К оплате»
+  }catch(e){
+    haptic.err();
+    msg.className = 'promo-msg err';
+    msg.textContent = e.message;
+    btn.disabled = false;
+  }
 }
 
 async function submitOrder(){
@@ -1276,7 +1754,7 @@ async function submitOrder(){
   btn.disabled = true;
   btn.textContent = 'Отправляем…';
 
-  const items = cartIds().map(id => ({ id, qty: cart.get(id) }));
+  const items = orderItems(); // корзина либо один товар-заявка
   const customer = {
     name: val('coName') || user.first_name || 'Без имени',
     phone: val('coPhone'), contact: val('coContact'), email: val('coEmail'),
@@ -1288,13 +1766,17 @@ async function submitOrder(){
     const res = await fetch('/api/checkout', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ initData: tg?.initData || '', items, customer }),
+      // код шлём, а не готовую скидку: сервер пересчитает сам
+      body: JSON.stringify({ initData: tg?.initData || '', items, customer,
+        promoCode: appliedPromo ? appliedPromo.code : '' }),
     });
     const data = await res.json();
     if(!res.ok || !data.ok) throw new Error(data.error || 'Не удалось отправить заказ');
     haptic.ok();
     showCheckoutSuccess(data.orderText, data.orderId);
-    cart.clear();
+    // заявка по одному товару корзину не трогает — чистим только то, что отправили
+    if(inquiryItem) inquiryItem = null; else cart.clear();
+    appliedPromo = null; // код израсходован, на следующий заказ не переносится
     updateCartUI();
     loadProducts(); // остатки на сервере уменьшились — подтягиваем актуальные
   }catch(e){
@@ -1310,7 +1792,8 @@ function showCheckoutSuccess(orderText, orderId){
   const pay = settings.payments || {};
   document.getElementById('checkoutBody').innerHTML = `
     <div class="sheet-title">${esc(c.successTitle)}</div>
-    <div style="font-size:calc(14px * var(--fs));color:var(--muted);line-height:1.6;margin-bottom:20px;white-space:pre-line">${esc(c.successText)}</div>
+    <div style="font-size:calc(14px * var(--fs));color:var(--muted);line-height:1.6;margin-bottom:16px;white-space:pre-line">${esc(c.successText)}</div>
+    ${orderText ? `<pre class="order-receipt">${esc(orderText)}</pre>` : ''}
     ${pay.enabled && orderId ? `<button class="checkout-btn" id="coPayBtn" style="margin-bottom:10px">${esc(pay.buttonText || 'Оплатить онлайн')}</button>` : ''}
     <button class="${pay.enabled && orderId ? 'secondary-btn' : 'checkout-btn'}" id="coCopyBtn" style="margin-bottom:10px">Скопировать заказ</button>
     ${settings.manager.buyUrl ? `<button class="secondary-btn" id="coWriteBtn">Написать менеджеру</button>` : ''}
@@ -1353,7 +1836,7 @@ async function startPayment(orderId, btn){
 }
 
 function updateFavUI(){
-  const n = favorites.size;
+  const n = [...favorites].filter(id => products.some(p => p.id === id)).length;
   const badge = document.getElementById('favCount');
   badge.style.display = n ? 'flex' : 'none';
   badge.textContent = n;
@@ -1381,7 +1864,15 @@ function toggleFav(id){
 
 // --- overlays + нативная BackButton ---
 const sheetStack = [];
+// Шторки не накладываются друг на друга НИКОГДА: они все position:fixed с одним
+// z-index, и вторая просто просвечивает сквозь первую. Ни один сценарий в
+// приложении не требует двух открытых шторок разом, поэтому открытие новой
+// закрывает предыдущую — это чинит весь класс бага, а не отдельные переходы
+// (корзина → заказ, профиль → избранное и любые будущие).
 function openSheet(id){
+  document.querySelectorAll('.overlay.open').forEach(ov => {
+    if(ov.id !== id) closeSheet(ov.id);
+  });
   document.getElementById(id).classList.add('open');
   if(!sheetStack.includes(id)) sheetStack.push(id);
   syncBackButton();
@@ -1426,6 +1917,12 @@ document.querySelectorAll('.overlay').forEach(ov=>{
 document.querySelectorAll('[data-close]').forEach(btn=>{
   btn.onclick = () => { haptic.tap(); closeSheet(btn.closest('.overlay').id); };
 });
+// На десктопе Esc закрывает верхнюю шторку — этого ждут по привычке, а на
+// телефоне ту же роль играет нативная BackButton Telegram.
+document.addEventListener('keydown', e => {
+  if(e.key === 'Escape' && sheetStack.length){ e.preventDefault(); closeTopSheet(); }
+});
+
 document.getElementById('lightboxClose').onclick = closeLightbox;
 document.getElementById('lightbox').addEventListener('click', e => {
   if(e.target.id !== 'lightboxImg') closeLightbox();
@@ -1468,21 +1965,32 @@ function applyFavicon(s){
 }
 
 // --- применение настроек к витрине ---
+// В режиме colorScheme=telegram подмешиваем цвета клиента из themeParams,
+// чтобы мини-апп не спорил с оболочкой. Вынесено в функцию: её же зовём из
+// обработчика themeChanged при смене темы в самом Telegram.
+function telegramThemeMix(t){
+  if(t.colorScheme !== 'telegram' || !tg?.themeParams?.bg_color) return null;
+  const tp = tg.themeParams;
+  // Только реально присланные ключи: отсутствующий цвет Telegram не должен
+  // затирать палитру продавца значением undefined.
+  const mix = {};
+  if(tp.bg_color) mix.bg = tp.bg_color;
+  if(tp.secondary_bg_color){ mix.surface = tp.secondary_bg_color; mix.surface2 = tp.secondary_bg_color; }
+  if(tp.text_color) mix.text = tp.text_color;
+  if(tp.hint_color) mix.muted = tp.hint_color;
+  if(tp.button_color) mix.accent = tp.button_color;
+  if(tp.link_color) mix.accent2 = tp.link_color;
+  return mix;
+}
+
 function applySettings(s){
   settings = s;
   const t = s.theme;
 
-  // тема: пресет + ручные переопределения; при colorScheme=telegram
-  // подмешиваем цвета клиента, чтобы мини-апп не спорил с оболочкой
-  const themeInput = { ...t };
-  if(t.colorScheme === 'telegram' && tg?.themeParams?.bg_color){
-    const tp = tg.themeParams;
-    Object.assign(themeInput, {
-      bg: tp.bg_color, surface: tp.secondary_bg_color || tp.bg_color, surface2: tp.secondary_bg_color || tp.bg_color,
-      text: tp.text_color, muted: tp.hint_color, accent: tp.button_color, accent2: tp.link_color,
-    });
-  }
+  // тема: пресет + ручные переопределения + (опционально) цвета Telegram
+  const themeInput = Object.assign({}, t, telegramThemeMix(t) || {});
   applyTheme(themeInput);
+  syncColorScheme();
   setCurrency({ symbol: s.commerce.currency, position: s.commerce.currencyPosition, locale: s.advanced.locale });
 
   document.body.classList.toggle('grain', !!t.grain);
@@ -1517,11 +2025,7 @@ function applySettings(s){
   tagline.style.display = s.brand.showTagline && s.brand.tagline ? '' : 'none';
   tagline.textContent = s.brand.tagline;
 
-  const mq = document.getElementById('marquee');
-  if(t.marquee && t.marqueeText){
-    mq.style.display = '';
-    mq.querySelector('span').textContent = (t.marqueeText + '   ✦   ').repeat(3);
-  } else mq.style.display = 'none';
+  sizeMarquee(t);
 
   // каталог
   document.getElementById('searchBox').style.display = s.catalog.showSearch ? '' : 'none';
@@ -1533,16 +2037,27 @@ function applySettings(s){
   document.getElementById('cartBtn').style.display = (s.commerce.enableCart && s.commerce.mode === 'cart') ? '' : 'none';
   document.getElementById('favBtn').style.display = s.commerce.enableFavorites ? '' : 'none';
 
-  // режим обслуживания — прячем витрину целиком
-  if(s.advanced.maintenanceMode){
-    document.getElementById('app').style.display = 'none';
-    document.getElementById('cartBtn').style.display = 'none';
-    document.getElementById('maintenance').style.display = 'block';
-    document.getElementById('maintenanceText').textContent = s.advanced.maintenanceText;
-  }
+  // Режим обслуживания. Переключение симметричное: раньше витрина только
+  // пряталась и обратно не возвращалась — в превью админки после снятия галочки
+  // оставался пустой экран, и казалось, что превью сломалось.
+  const off = s.advanced.maintenanceMode;
+  document.getElementById('app').style.display = off ? 'none' : '';
+  document.getElementById('maintenance').style.display = off ? 'block' : 'none';
+  document.getElementById('maintenanceText').textContent = s.advanced.maintenanceText;
+  if(off) document.getElementById('cartBtn').style.display = 'none';
 
   document.getElementById('profileAbout').textContent = s.profile.aboutText || '';
+  const avatarBtn = document.getElementById('profileBtn');
+  avatarBtn.className = 'avatar-btn menu-' + (s.profile.avatarHint || 'caret');
   renderProfileMenu();
+
+  // запоминаем тему для мгновенного старта в следующий раз (в превью не пишем —
+  // там настройки несохранённые, и они не должны попасть в кэш витрины)
+  if(!IS_PREVIEW) cacheTheme(s.theme, s.brand);
+
+  // цвета нативной MainButton берутся из темы — после перекраски их надо
+  // пересинхронизировать, иначе кнопка останется в прошлой палитре
+  syncMainButton();
 }
 
 async function loadSettings(){
@@ -1568,6 +2083,14 @@ async function loadProducts(){
     renderGrid();
     return;
   }
+  // Каталог приехал — выкидываем из корзины и избранного то, чего больше нет,
+  // и сразу сохраняем: иначе мусор копился бы в localStorage бесконечно.
+  const alive = id => products.some(p => p.id === id);
+  let pruned = false;
+  for(const id of [...cart.keys()]) if(!alive(id)){ cart.delete(id); pruned = true; }
+  for(const id of [...favorites]) if(!alive(id)){ favorites.delete(id); pruned = true; }
+  if(pruned) saveState();
+
   renderCategories();
   renderGrid();
   renderFavList();
@@ -1587,6 +2110,13 @@ async function loadProducts(){
 // страница, встроившая нас в iframe, могла бы подменить магазин.
 const IS_PREVIEW = new URLSearchParams(location.search).has('preview');
 if(IS_PREVIEW){
+  // Превью прячем до первых настроек из админки: иначе видно, как оно
+  // рисуется дефолтной тёмной темой и только потом перекрашивается в нужную.
+  document.documentElement.style.visibility = 'hidden';
+  const reveal = () => { document.documentElement.style.visibility = ''; };
+  // страховка, если админка почему-то не ответит — лучше показать хоть что-то
+  setTimeout(reveal, 1500);
+
   window.addEventListener('message', e => {
     if(e.origin !== location.origin) return;
     if(!e.data || e.data.type !== 'shop-preview-settings') return;
@@ -1594,6 +2124,7 @@ if(IS_PREVIEW){
       applySettings(e.data.settings);
       renderCategories();
       renderGrid();
+      reveal();
       // подтверждаем, ЧТО именно применили: админка сверяет это с текущим
       // состоянием и повторит отправку, если превью отстало
       parent.postMessage({ type: 'shop-preview-applied', applied: JSON.stringify(e.data.settings) }, location.origin);
@@ -1608,6 +2139,41 @@ if(IS_PREVIEW){
   // через секунду берём настройки с сервера, чтобы не остаться пустыми
   setTimeout(() => { if(!settings) loadSettings().then(renderGrid); }, 1000);
 }
+
+// Возврат из платёжного сервиса. Мерчант присылает покупателя на /?paid=<id>
+// или /?failed=<id>; без обработки человек попадал просто в каталог и не
+// понимал, прошла оплата или нет. Открывается это обычно во встроенном
+// браузере Telegram, где мини-апп-API недоступно, поэтому обходимся своей
+// разметкой и не дёргаем SDK.
+(function handlePaymentReturn(){
+  const q = new URLSearchParams(location.search);
+  const paid = q.get('paid'), failed = q.get('failed');
+  if(!paid && !failed) return;
+
+  const show = () => {
+    const ok = !!paid;
+    const box = document.createElement('div');
+    box.className = 'pay-return';
+    box.innerHTML = `
+      <div class="pay-card ${ok ? 'ok' : 'bad'}">
+        <div class="pay-icon">${ok ? '✓' : '!'}</div>
+        <div class="pay-title">${ok ? 'Оплата получена' : 'Оплата не прошла'}</div>
+        <div class="pay-text">${ok
+          ? esc((settings && settings.payments && settings.payments.successText) || 'Спасибо! Заказ оплачен.')
+          : 'Деньги не списаны. Можно попробовать ещё раз или написать менеджеру.'}</div>
+        <div class="pay-order">Заказ №${esc(paid || failed)}</div>
+        <button class="checkout-btn" id="payBackBtn">Вернуться в магазин</button>
+      </div>`;
+    document.body.appendChild(box);
+    document.getElementById('payBackBtn').onclick = () => {
+      box.remove();
+      // чистим адрес, чтобы обновление страницы не показывало экран снова
+      history.replaceState(null, '', location.pathname);
+    };
+  };
+  // ждём настройки ради текста и темы, но не дольше секунды
+  if(settings) show(); else setTimeout(show, 900);
+})();
 
 // порядок важен: сперва тема (иначе увидим вспышку дефолтной), потом товары
 renderSkeletons();

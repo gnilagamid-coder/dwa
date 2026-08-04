@@ -113,27 +113,53 @@ async function notifyManagers(s, text) {
   }
 }
 
+const POLL_TIMEOUT = 25;                 // сколько Telegram держит соединение
+const POLL_ABORT_MS = POLL_TIMEOUT * 1000 + 8000; // запас на дорогу
+
 async function poll() {
+  let failures = 0;
   while (running) {
     try {
-      const res = await tgApi('getUpdates', { offset, timeout: 30, allowed_updates: ['message'] });
+      // retries:0 здесь принципиально. Раньше шли ретраи по умолчанию, и при
+      // оборванном соединении один цикл опроса занимал до 3 × 35 с + паузы —
+      // около двух минут, в течение которых бот не отвечал вообще. Именно это
+      // выглядело как «после простоя бот долго просыпается»: NAT провайдера
+      // тихо выбрасывает простаивающий коннект, а мы этого не замечали.
+      // Цикл сам себе ретрай, дублировать его внутри tgApi не нужно.
+      const res = await tgApi(
+        'getUpdates',
+        { offset, timeout: POLL_TIMEOUT, allowed_updates: ['message'] },
+        { retries: 0, timeoutMs: POLL_ABORT_MS }
+      );
+
       if (res && res.ok) {
+        failures = 0;
         for (const u of res.result) {
           offset = u.update_id + 1;
           try { await handleUpdate(u); } catch (e) { console.error('[bot] update failed:', e.message); }
         }
-      } else if (res && /conflict/i.test(res.description || '')) {
+        continue; // сразу за следующей порцией, без пауз
+      }
+
+      if (res && /conflict/i.test(res.description || '')) {
         // где-то ещё запущен второй экземпляр или висит вебхук
         console.error('[bot]', res.description, '— снимаю вебхук и продолжаю');
         await tgApi('deleteWebhook', {});
         await sleep(5000);
-      } else if (res && !res.ok) {
-        console.error('[bot] getUpdates:', res.description);
-        await sleep(5000);
+        continue;
       }
+
+      // Сетевой сбой: первый раз переподключаемся мгновенно — обычно это как раз
+      // протухший коннект, и повтор проходит сразу. Дальше нарастающая пауза,
+      // чтобы не долбить недоступный сервер, но не больше 30 с.
+      failures++;
+      if (res && !res.ok) console.error('[bot] getUpdates:', res.description);
+      const wait = failures === 1 ? 0 : Math.min(30000, 2000 * failures);
+      if (wait) await sleep(wait);
     } catch (e) {
+      failures++;
       console.error('[bot] poll error:', e.message);
-      await sleep(5000);
+      await sleep(Math.min(30000, 2000 * failures));
     }
   }
 }

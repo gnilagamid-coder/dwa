@@ -1,0 +1,18 @@
+# Переводы строк держим в LF независимо от того, с какой ОС коммитят.
+# Без этого правки с Windows приезжают в CRLF, и весь файл выглядит переписанным.
+# Для install.sh и update.sh это ещё и вопрос работоспособности: bash на Linux
+# спотыкается о \r и падает с «$'\r': command not found».
+* text=auto eol=lf
+
+*.sh   text eol=lf
+*.js   text eol=lf
+*.html text eol=lf
+*.json text eol=lf
+*.md   text eol=lf
+*.toml text eol=lf
+
+# бинарники не трогаем
+*.png  binary
+*.jpg  binary
+*.webp binary
+*.ico  binary

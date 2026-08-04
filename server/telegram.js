@@ -73,8 +73,10 @@ function validateInitData(initData) {
   if (!hash) return null;
   params.delete('hash');
 
+  // Сортировка строго по алфавиту (по кодовым единицам), как в эталонных примерах
+  // документации: localeCompare зависит от локали и может дать другой порядок.
   const dataCheckString = [...params.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
     .map(([k, v]) => `${k}=${v}`)
     .join('\n');
 

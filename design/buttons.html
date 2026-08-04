@@ -1,0 +1,89 @@
+<!-- @dsCard group="Компоненты" -->
+<!doctype html><html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+/* Системная safe area: вырезы экрана, навигационные панели */
+html{
+  padding-top:var(--tg-safe-area-inset-top,0px);
+  padding-right:var(--tg-safe-area-inset-right,0px);
+  padding-bottom:var(--tg-safe-area-inset-bottom,0px);
+  padding-left:var(--tg-safe-area-inset-left,0px);
+}
+body{
+  font-family:Inter,-apple-system,sans-serif;
+  /* Content safe area: контент не перекрывается UI Telegram */
+  padding-top:calc(28px + var(--tg-content-safe-area-inset-top,0px));
+  padding-right:calc(28px + var(--tg-content-safe-area-inset-right,0px));
+  padding-bottom:calc(28px + var(--tg-content-safe-area-inset-bottom,0px));
+  padding-left:calc(28px + var(--tg-content-safe-area-inset-left,0px));
+  min-height:var(--app-stable-height,auto);
+  display:grid;gap:26px;align-content:start;
+  background:var(--tg-theme-bg-color);
+  color:var(--tg-theme-text-color);
+}
+.pane{padding:22px;border-radius:14px;background:var(--tg-theme-section-bg-color)}
+.pane h3{font-family:'Inter';font-size:12px;letter-spacing:1.2px;text-transform:uppercase;color:var(--tg-theme-hint-color);margin-bottom:16px;font-weight:600}
+
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+button{font:inherit;cursor:pointer;border:none;border-radius:14px;min-height:48px;padding:0 22px;
+  font-family:'Inter';font-weight:600;letter-spacing:.4px}
+.primary{background:var(--tg-theme-button-color);color:var(--tg-theme-button-text-color)}
+.secondary{background:var(--tg-theme-secondary-bg-color);color:var(--tg-theme-text-color)}
+.ghost{background:transparent;color:var(--tg-theme-hint-color);border:1px solid var(--tg-theme-hint-color)}
+.icon{min-height:44px;width:44px;padding:0;display:inline-flex;align-items:center;justify-content:center;
+  background:var(--tg-theme-secondary-bg-color);color:var(--tg-theme-text-color)}
+button:disabled{opacity:.35;cursor:default}
+
+</style></head><body>
+<div class="pane"><h3>Кнопки — тема Telegram</h3>
+<div class="row">
+  <button class="primary">Оформить заказ</button>
+  <button class="secondary">Написать менеджеру</button>
+  <button class="ghost">Отмена</button>
+  <button class="icon">♥</button>
+  <button class="primary" disabled>Раскуплено</button>
+</div>
+</div>
+
+<script>
+(function() {
+  // Защита: SDK гарантированно доступен только внутри клиента Telegram
+  if (!window.Telegram || !window.Telegram.WebApp) return;
+  var tg = window.Telegram.WebApp;
+
+  // Сообщаем Telegram, что приложение готово к отображению
+  tg.ready();
+
+  // Разворачиваем Mini App на максимальную высоту, если ещё не развёрнут
+  if (!tg.isExpanded) {
+    tg.expand();
+  }
+
+  // Тема: цвета --tg-theme-* обновляются SDK автоматически,
+  // здесь лишь фиксируем текущую цветовую схему
+  function applyColorScheme() {
+    document.documentElement.setAttribute('data-theme', tg.colorScheme);
+  }
+
+  // Высота: для макета используется viewportStableHeight,
+  // а не viewportHeight (рекомендация документации)
+  function applyStableHeight() {
+    document.documentElement.style.setProperty('--app-stable-height', tg.viewportStableHeight + 'px');
+  }
+
+  applyColorScheme();
+  applyStableHeight();
+
+  tg.onEvent('themeChanged', applyColorScheme);
+
+  tg.onEvent('viewportChanged', function(data) {
+    if (data.isStateStable) {
+      applyStableHeight();
+    }
+  });
+})();
+</script>
+</body></html>
